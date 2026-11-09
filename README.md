@@ -35,3 +35,7 @@ npx terser@5.31.0 check.js -c -m -o check.min.js
 ```
 
 Then replace the `href` of `#bm` in `index.html` with `javascript:` + the URL-encoded contents of `check.min.js`. Teachers must drag the new button again to get the update.
+
+## License
+
+© 2026 Jason Beyer, RJ Ed Tech. Licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): free to share and adapt for non-commercial use with credit. See [LICENSE](LICENSE) for what the license does not cover.
