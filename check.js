@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.0.0';
+var VERSION = '2.0.1';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -414,7 +414,8 @@ async function analyze(cid, now) {
   var mBad = [], mWarn = [];
   var weighted = !!course.apply_assignment_group_weights;
   var AIX = base + '/courses/' + cid + '/assignments';
-  if (weighted && groups.length) {
+  /* Weights only matter once the class has graded work in Canvas. */
+  if (weighted && groups.length && graded.length) {
     var tot = groups.reduce(function (s, g) { return s + (g.group_weight || 0); }, 0);
     if (tot === 0) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(“Weight final grade based on assignment groups” is on, but every group is set to 0%. Set the weights, or turn weighting off.)</span>');
     else if (Math.abs(tot - 100) > 0.05) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(add up to ' + Math.round(tot * 100) / 100 + '%, not 100%' + (tot < 100 ? '; Canvas scales them up, so each group counts for more than it says)' : '; grades can come out higher than they should)') + '</span>');
@@ -424,14 +425,15 @@ async function analyze(cid, now) {
       if (n) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count)</span>');
     });
   }
-  if (!weighted && groups.length > 1) {
+  if (!weighted && groups.length > 1 && graded.length) {
     var wsum = groups.reduce(function (s, g) { return s + (g.group_weight || 0); }, 0);
     if (wsum > 0) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(your groups have weights, but “Weight final grade based on assignment groups” is off, so Canvas grades by total points. Fine if they’re leftovers from a copied course.)</span>');
   }
   pubAsg.forEach(function (a) {
     var rp = a.rubric_settings && a.rubric_settings.points_possible, pts = a.points_possible || 0;
+    /* Many teachers type the score and never fill in the rubric, so a mismatch is only worth a look. */
     if (a.use_rubric_for_grading && typeof rp === 'number' && rp > 0 && pts > 0 && Math.abs(rp - pts) > 0.001)
-      mBad.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + ', and the rubric is used for grading)'));
+      mWarn.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + '. If you score with the rubric, a perfect score shows as ' + rp + ' out of ' + pts + '.)'));
     if (a.omit_from_final_grade && a.grading_type !== 'not_graded' && pts > 0)
       mWarn.push(aEdit(a, '(worth ' + pts + ' points, but set not to count toward the final grade)'));
   });

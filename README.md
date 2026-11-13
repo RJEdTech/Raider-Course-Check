@@ -18,7 +18,7 @@ Every check traces to a page in the faculty PD course. If it can't, it doesn't b
 | Required | Every graded item has a due date | a graded item has no due date for the class or a whole section (a blank date on one student's extension is "worth a look") |
 | Required | Due dates students can use | it locks before it's due, opens after it's due, or is dated outside the semester |
 | Required | Grades kept up to date, and posted | 3+ grades on one item have been hidden from students for over two weeks (work waiting 2+ weeks is "worth a look") |
-| Required | The gradebook does the math you mean | weights don't add to 100% (or are all 0%) while weighting is on, or a rubric used for grading doesn't match the points |
+| Required | The gradebook does the math you mean | weights don't add to 100% (or are all 0%) while weighting is on and the class has graded work (rubric totals that don't match the points are "worth a look": most teachers type the score) |
 | Required | AI policy · accommodation plans | never: the teacher confirms these with "I have this" |
 | Expected | One graded item a week | never: a row of week boxes; empty weeks say why, and the teacher can mark a week as having a reason |
 | Expected | You assess every submission yourself | never: teacher confirms |
