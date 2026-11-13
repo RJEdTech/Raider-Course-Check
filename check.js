@@ -258,7 +258,12 @@ async function analyze(cid, now) {
     var ds = (mo.items || []).map(function (it) { var a = it.type === 'Assignment' ? byAid[it.content_id] : it.type === 'Quiz' ? byAid['q' + it.content_id] : it.type === 'Discussion' ? byAid['d' + it.content_id] : null; return a && firstDue(a); }).filter(Boolean);
     return { mo: mo, ds: ds };
   }).filter(function (x) { return x.ds.length; });
+  /* "Unit 2 Essay" goes to the module named Unit 2 (or Chapter 2, Week 2, Lesson 2) when there is one. */
+  var NUMRE = /\b(unit|chapter|ch\.?|cap[ií]tulo|lecci[oó]n|week|semana|lesson|module|stage|th[eè]me)\s*(\d+)/i;
+  function numKey(t) { var mm = (t || '').match(NUMRE); return mm ? mm[1].toLowerCase().replace(/\.$/, '').replace(/^ch$/, 'chapter') + ' ' + (+mm[2]) : null; }
   function suggestModule(a) {
+    var k = numKey(a.name);
+    if (k) { var byName = pubMods.filter(function (mo) { return numKey(mo.name) === k; })[0]; if (byName) return byName; }
     var d = firstDue(a); if (!d || !modDates.length) return null;
     var best = null, bestGap = Infinity;
     modDates.forEach(function (x) { x.ds.forEach(function (t) { var g = Math.abs(t - d); if (g < bestGap) { bestGap = g; best = x.mo; } }); });
@@ -266,7 +271,7 @@ async function analyze(cid, now) {
   }
   function modFix(a) {
     var mo = suggestModule(a);
-    return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (mo ? ' <span class="mu">→ ' + esc(mo.name) + '</span>' : '') +
+    return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (mo ? ' <span class="mu">→ try ' + esc(mo.name) + '</span>' : '') +
       ' <a class="fixit" href="' + esc(MODS + (mo ? '#module_' + mo.id : '')) + '" target="_blank" rel="noopener">Fix it</a>';
   }
   var mainOut = outA.filter(function (a) { return isGraded(a) && !offline(a); });
@@ -282,7 +287,7 @@ async function analyze(cid, now) {
   var minorCount = minorOut.length + outTopics.length + outQuizzes.length + orphanPages.length;
   var MW = 'Every assignment, quiz, discussion and page lives inside a published module, so students find everything in one place.';
   var r1detail = '', r1more = '';
-  if (mainOut.length) r1detail += '<div>Each one, with the module for its due date when there is one:</div>' + ul(mainOut.map(modFix));
+  if (mainOut.length) r1detail += '<div>Each one, with a suggested module (same unit or same week) when there is one:</div>' + ul(mainOut.map(modFix));
   if (minorCount) {
     r1more += '<div>Ungraded work, paper work and pages. They still belong in the module for that day:</div>' +
       ul(minorOut.map(function (a) { return modFix(a) + ' <span class="mu">' + esc(minorWhy(a)) + '</span>'; })
