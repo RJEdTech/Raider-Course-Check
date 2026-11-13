@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.0.1';
+var VERSION = '2.1.0';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -264,37 +264,37 @@ async function analyze(cid, now) {
   var outQuizzes = quizzes.filter(function (q) { return q.published && (q.quiz_type === 'practice_quiz' || q.quiz_type === 'survey') && !inMod['Q' + q.id]; });
   var minorCount = minorOut.length + outTopics.length + outQuizzes.length + orphanPages.length;
   var MW = 'Every assignment, quiz, discussion and page lives inside a published module, so students find everything in one place.';
-  var r1detail = '';
-  if (mainOut.length) r1detail += '<div>Add these to a module: in Modules, click <strong>+</strong> on the module and pick the item. A link on a page isn’t enough; the item itself goes in the module.</div>' + ul(mainOut.map(function (a) { return aLink(a); }));
+  var r1detail = '', r1more = '';
+  if (mainOut.length) r1detail += '<div>In Modules, click <strong>+</strong> on the module and pick the item. A link on a page isn’t enough.</div>' + ul(mainOut.map(function (a) { return aLink(a); }));
   if (minorCount) {
-    r1detail += '<div>' + (mainOut.length ? 'Also not in a module: smaller items (ungraded work, paper work and pages). They matter less, but they still belong in the module for that day:' : 'These smaller items (ungraded work, paper work and pages) still belong in the module for that day, so an absent student can find them:') + '</div>' +
+    r1more += '<div>Ungraded work, paper work and pages. They still belong in the module for that day:</div>' +
       ul(minorOut.map(function (a) { return aLink(a, minorWhy(a)); })
         .concat(outTopics.map(function (t) { return '<a href="' + esc(t.html_url) + '" target="_blank" rel="noopener">' + esc(t.title) + '</a> <span class="mu">(discussion)</span>'; }))
         .concat(outQuizzes.map(function (q) { return '<a href="' + esc(q.html_url) + '" target="_blank" rel="noopener">' + esc(q.title) + '</a> <span class="mu">(' + (q.quiz_type === 'survey' ? 'survey' : 'practice quiz') + ')</span>'; }))
         .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span>'; })), 12) +
       (orphanPages.length ? '<div class="mu">A page from an old version of the course? Unpublish it instead.</div>' : '');
   }
-  if (linkedPages.length) r1detail += '<div class="mu">' + plural(linkedPages.length, 'page') + ' outside modules ' + (linkedPages.length === 1 ? 'is' : 'are') + ' linked from your home page, syllabus or a module page, so students can reach ' + (linkedPages.length === 1 ? 'it' : 'them') + '. That’s fine.</div>';
+  if (linkedPages.length) r1more += '<div class="mu">' + plural(linkedPages.length, 'page') + ' outside modules ' + (linkedPages.length === 1 ? 'is' : 'are') + ' linked from your home page, syllabus or a module page, so students can reach ' + (linkedPages.length === 1 ? 'it' : 'them') + '. That’s fine.</div>';
   var anything = pubAsg.length + pages.length + topics.length;
   if (!anything) add({ key: 'mod', group: 'req', status: 'chk', name: 'Modules hold everything, in order', why: MW, result: 'Nothing is published yet.', fixHref: PD + 'module-setup', fixText: 'Module setup' });
   else if (mainOut.length) add({ key: 'mod', group: 'req', status: 'bad', name: 'Modules hold everything, in order', why: MW,
-    result: plural(mainOut.length, 'graded item') + ' students turn in on Canvas ' + (mainOut.length === 1 ? 'is' : 'are') + ' not in a published module' + (minorCount ? ', plus ' + minorCount + ' smaller ' + (minorCount === 1 ? 'item' : 'items') + '.' : '.'),
-    detail: r1detail, fixHref: MODS, fixText: 'Open my Modules' });
+    result: plural(mainOut.length, 'graded item isn’t', 'graded items aren’t') + ' in a module.',
+    detail: r1detail, more: r1more, moreLabel: minorCount ? 'Show ' + plural(minorCount, 'smaller item') : (linkedPages.length ? 'Pages outside modules' : ''), fixHref: MODS, fixText: 'Open my Modules' });
   else if (minorCount) add({ key: 'mod', group: 'req', status: 'warn', name: 'Modules hold everything, in order', why: MW,
-    result: 'All graded work students turn in is in a module. ' + plural(minorCount, 'other item') + ' (paper work, ungraded items or pages) ' + (minorCount === 1 ? 'is' : 'are') + ' not.',
-    detail: r1detail, fixHref: MODS, fixText: 'Open my Modules' });
+    result: plural(minorCount, 'smaller item isn’t', 'smaller items aren’t') + ' in a module.',
+    detail: r1more, fixHref: MODS, fixText: 'Open my Modules' });
   else add({ key: 'mod', group: 'req', status: 'ok', name: 'Modules hold everything, in order', why: MW, result: 'Everything students need is in a published module.', detail: r1detail });
 
   /* ============ REQUIRED 2: missing policy (automatic zero) ============ */
   var MPW = 'Missing work counts as a 0 automatically, so grades stay honest all term and families aren’t surprised at report-card time.';
   var MPFIX = PD + 'setting-up-our-automatic-missing-slash-late-policy-in-canvas';
   if (lpRes.status === 404 || (lpRes.ok && lpRes.json && lpRes.json.late_policy && !lpRes.json.late_policy.missing_submission_deduction_enabled)) {
-    add({ key: 'missing', group: 'req', status: 'bad', name: 'Automatic zero for missing work', why: MPW, result: 'Off.',
+    add({ key: 'missing', group: 'req', status: 'bad', name: 'Automatic zero for missing work', why: MPW, result: 'Off. Turn it on in the Gradebook.',
       detail: '<div>Gradebook → gear (Settings) → <strong>Late Policies</strong> → turn on <em>Automatically apply grade for missing submissions</em> and set it to 0%. Tell your classes before you turn it on.</div>',
       fixHref: MPFIX, fixText: 'How to set the policy' });
   } else if (lpRes.ok && lpRes.json && lpRes.json.late_policy) {
     var ded = Number(lpRes.json.late_policy.missing_submission_deduction);
-    if (ded >= 100) add({ key: 'missing', group: 'req', status: 'ok', name: 'Automatic zero for missing work', why: MPW, result: 'On: missing work counts as 0.' });
+    if (ded >= 100) add({ key: 'missing', group: 'req', status: 'ok', name: 'Automatic zero for missing work', why: MPW, result: 'On.' });
     else add({ key: 'missing', group: 'req', status: 'warn', name: 'Automatic zero for missing work', why: MPW,
       result: 'On, but missing work gets ' + Math.round(100 - ded) + '% instead of 0.',
       detail: '<div>The RJ expectation is an automatic zero for missing work. In Late Policies, set <em>Grade for missing submissions</em> to 0%. (Late penalties are a separate setting, decided by your level.)</div>',
@@ -324,7 +324,7 @@ async function analyze(cid, now) {
   else if (noDueSome.length) add({ key: 'due', group: 'req', status: 'warn', name: 'Every graded item has a due date', why: DW,
     result: 'Every item has a due date for the class, but ' + plural(noDueSome.length, 'item has', 'items have') + ' a date for a few students with no due date.',
     detail: '<div>Usually an extension where the due date was left blank. Those students won’t see it on their list.</div>' + ul(noDueSome), fixHref: DFIX, fixText: 'Every kind of work, on the student’s list' });
-  else add({ key: 'due', group: 'req', status: 'ok', name: 'Every graded item has a due date', why: DW, result: 'All ' + graded.length + ' have a due date.' });
+  else add({ key: 'due', group: 'req', status: 'ok', name: 'Every graded item has a due date', why: DW, result: 'All ' + graded.length + ' have one.' });
 
   /* Dates that keep work off the list or make it late before students can turn it in. */
   var dBad = [], dWarn = [];
@@ -357,11 +357,11 @@ async function analyze(cid, now) {
   });
   var UW = 'A date that locks early, opens late or sits outside the semester makes work late before students can turn it in, or keeps it off their list.';
   if (dBad.length) add({ key: 'dates', group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
-    result: plural(dBad.length, 'item') + ' can’t be turned in on time as set' + (dWarn.length ? ', and ' + plural(dWarn.length, 'more is', 'more are') + ' worth a look.' : '.'),
-    detail: '<div>Open each one, click <strong>Edit</strong>, and fix the dates under <em>Assign</em>:</div>' + ul(dBad) + (dWarn.length ? '<div>Worth a look:</div>' + ul(dWarn) : '') });
+    result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
+    detail: '<div>Open each one, click <strong>Edit</strong>, and fix the dates under <em>Assign</em>:</div>' + ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
   else if (dWarn.length) add({ key: 'dates', group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
     result: plural(dWarn.length, 'item') + ' worth a look.', detail: ul(dWarn) });
-  else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'No dates that lock early, open late or fall outside the semester.' });
+  else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
 
   /* Grades kept up to date, and posted where students can see them. */
   var GW = 'Students and families see where they stand through each six-week grading period. A hidden grade is the same as no grade.';
@@ -403,7 +403,7 @@ async function analyze(cid, now) {
     var gr = [];
     if (hList.length) gr.push(plural(hList.length, 'item has', 'items have') + ' grades hidden from students for over a week');
     if (wList.length) gr.push(plural(wList.length, 'item has', 'items have') + ' work waiting more than two weeks for a grade');
-    if (!gr.length) add({ key: 'grades', group: 'req', status: 'ok', name: 'Grades kept up to date, and posted', why: GW, result: 'Nothing waiting more than two weeks, and no grades hidden from students.' });
+    if (!gr.length) add({ key: 'grades', group: 'req', status: 'ok', name: 'Grades kept up to date, and posted', why: GW, result: 'Nothing waiting, nothing hidden.' });
     else add({ key: 'grades', group: 'req', status: oldHidden ? 'bad' : 'warn', name: 'Grades kept up to date, and posted', why: GW,
       result: gr.join('; ') + '.', detail: gd, fixHref: GFIX, fixText: 'Set up your gradebook' });
   } catch (e) {
@@ -442,12 +442,12 @@ async function analyze(cid, now) {
   Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1) mWarn.push(aLink(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)')); });
   var MW2 = 'Canvas is the single source of truth for grades, so the setup behind the number has to do the math you mean.';
   if (mBad.length) add({ key: 'math', group: 'req', status: 'bad', name: 'The gradebook does the math you mean', why: MW2,
-    result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong' + (mWarn.length ? ', and ' + plural(mWarn.length, 'more is', 'more are') + ' worth a look.' : '.'),
-    detail: ul(mBad) + (mWarn.length ? '<div>Worth a look:</div>' + ul(mWarn) : ''), fixHref: GFIX, fixText: 'Set up your gradebook' });
+    result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong.',
+    detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: GFIX, fixText: 'Set up your gradebook' });
   else if (mWarn.length) add({ key: 'math', group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
     result: plural(mWarn.length, 'thing', 'things') + ' worth a look.', detail: ul(mWarn), fixHref: GFIX, fixText: 'Set up your gradebook' });
   else if (graded.length) add({ key: 'math', group: 'req', status: 'ok', name: 'The gradebook does the math you mean', why: MW2,
-    result: weighted ? 'Group weights add up to 100%, and nothing is set to skip the final grade.' : 'Nothing found that would make a grade come out wrong.' });
+    result: weighted ? 'Weights add up to 100%.' : 'Nothing that skews a grade.' });
 
   /* ============ REQUIRED 4 + 5, EXPECTED 2: things only the teacher can confirm ============ */
   var aiHits = [];
@@ -518,12 +518,12 @@ async function analyze(cid, now) {
     var showing = tabs.filter(function (t) { return SIX[t.id] && !t.hidden && t.visibility !== 'admins' && t.visibility !== 'none'; });
     var modsOk = R.filter(function (r) { return r.key === 'mod'; })[0];
     var TW = 'Students see a short menu (Home, Modules, Grades, plus any tool you use), so there’s one place to look. Hiding a menu link doesn’t delete or lock anything.';
-    if (!showing.length) add({ key: 'menu', group: 'route', status: 'ok', name: 'A short menu: one route', why: TW, result: 'Assignments, Quizzes, Files, Pages, Discussions and People are hidden from students.' });
+    if (!showing.length) add({ key: 'menu', group: 'route', status: 'ok', name: 'A short menu: one route', why: TW, result: 'Students see the short menu.' });
     else if (modsOk && modsOk.status === 'bad') add({ key: 'menu', group: 'route', status: 'chk', name: 'A short menu: one route', why: TW,
-      result: 'Students still see ' + showing.map(function (t) { return t.label; }).join(', ') + '. Hide them after everything is in modules, not before.',
+      result: 'After modules are done, hide ' + showing.map(function (t) { return t.label; }).join(', ') + '.',
       detail: '<div>If an item isn’t in a module, hiding its menu link leaves students no way to browse to it. Finish the modules item above first.</div>', fixHref: ROUTE + '#steps', fixText: 'One route: 3 steps' });
     else add({ key: 'menu', group: 'route', status: 'warn', name: 'A short menu: one route', why: TW,
-      result: 'Students also see ' + showing.map(function (t) { return t.label; }).join(', ') + '.',
+      result: 'Hide ' + showing.map(function (t) { return t.label; }).join(', ') + '.',
       detail: '<div><strong>Settings → Navigation</strong>. Beside each one, click <strong>⋮</strong>, then <strong>Disable</strong>. Click <strong>Save</strong> at the bottom. Items still open from Modules, from links and from each student’s List View and To Do.</div>' +
         (showing.some(function (t) { return t.id === 'files'; }) ? '<div class="mu">Answer keys or old tests in Files? Hiding the menu link doesn’t protect them. Unpublish those files.</div>' : ''),
       fixHref: ROUTE + '#steps', fixText: 'One route: 3 steps' });
@@ -538,18 +538,18 @@ async function analyze(cid, now) {
       return !(mo.items || []).some(function (it) { return (it.type === 'SubHeader' || it.type === 'Page') && dateRe.test(it.title || ''); });
     });
     var DTW = 'An absent student opens Modules, finds the date they missed, and sees the notes, the work and when it’s due.';
-    if (!undated.length) add({ key: 'dated', group: 'route', status: 'ok', name: 'Each class or week has its date on it', why: DTW, result: 'Every module with work has a date in its name, a header or a page title.' });
+    if (!undated.length) add({ key: 'dated', group: 'route', status: 'ok', name: 'Each class or week has its date on it', why: DTW, result: 'Every module shows its dates.' });
     else add({ key: 'dated', group: 'route', status: 'chk', name: 'Each class or week has its date on it', why: DTW,
-      result: undated.length + ' of ' + workMods.length + ' modules with work show no date in the name, a header or a page title.',
+      result: undated.length + ' of ' + workMods.length + ' modules show no date.',
       detail: '<div>Put the date where students look: in the module name (“Week 10: Oct 20–23”), or a text header or page for each class (“Tue 10/20 (R) · Wed 10/21 (W)”). The checker can miss a date written another way, so look before you change anything.</div>' + ul(undated.map(function (mo) { return esc(mo.name); })),
       fixHref: ROUTE, fixText: 'Pick your modules pattern' });
   }
 
   var emptyMods = pubMods.filter(function (mo) { return !(mo.items || []).some(function (it) { return it.published !== false && it.type !== 'SubHeader'; }); });
   if (emptyMods.length) add({ key: 'empty', group: 'route', status: 'warn', name: 'No empty modules', why: 'An empty module looks like missing work to a student.',
-    result: plural(emptyMods.length, 'published module has', 'published modules have') + ' nothing students can open.',
+    result: plural(emptyMods.length, 'module is', 'modules are') + ' empty.',
     detail: ul(emptyMods.map(function (mo) { return esc(mo.name); })) + '<div>Fill it, or unpublish it until it’s ready.</div>', fixHref: MODS, fixText: 'Open my Modules' });
-  else if (pubMods.length) add({ key: 'empty', group: 'route', status: 'ok', name: 'No empty modules', why: 'An empty module looks like missing work to a student.', result: 'Every published module has something in it.' });
+  else if (pubMods.length) add({ key: 'empty', group: 'route', status: 'ok', name: 'No empty modules', why: 'An empty module looks like missing work to a student.', result: 'None empty.' });
 
   /* ============ NEXT STEP on the PD ladder ============ */
   var verbRe = /^\s*(read|watch|listen|do|reflect|practice|write|share|ask|apply|show|discuss|prepare|review|study|create|analyze|annotate|explore|investigate|present|revise|draft|leer|escribir|escuchar|practicar|ver|hablar|lire|écrire|écouter|parler)\b\s*[·:\-–—|]/i;
@@ -602,12 +602,12 @@ function evaluate(data, store) {
       r.gaps = gaps;
       var exNote = excused ? ' Not counting ' + plural(excused, 'week') + ' you marked as having a reason.' : '';
       if (!counted) { r.status = 'chk'; r.result = 'No full week of classes has finished yet.' + exNote; }
-      else if (!gaps.length) { r.status = 'ok'; r.result = 'Something graded was due every week: ' + plural(hit, 'week') + ' so far.' + exNote; }
+      else if (!gaps.length) { r.status = 'ok'; r.result = 'Every week so far.'; }
       else {
         r.status = 'warn';
         var g = gaps[0];
         var why1 = g.other.length ? 'only ' + plural(g.other.length, 'ungraded or completion item') + ' ' + (g.other.length === 1 ? 'was' : 'were') + ' due' : 'nothing was due';
-        r.result = hit + ' of ' + counted + ' weeks had something graded due. ' + (gaps.length === 1 ? 'The week of ' + g.range + ', ' + why1 + '.' : 'The ' + gaps.length + ' weeks without one are below.') + exNote;
+        r.result = plural(gaps.length, 'week', 'weeks') + ' with nothing graded due' + (gaps.length === 1 ? ' (' + g.range + ', ' + why1 + ').' : '.');
       }
     }
   });
@@ -617,145 +617,159 @@ function evaluate(data, store) {
 /* ---------------- panel ---------------- */
 var CSS = [
 '#ID{--ink:#1a1a1a;--ink2:#444;--mute:#6E6A64;--bg:#fff;--panel:#f7f7f4;--line:#e2e2dd;--char:#2a2a2a;--red:#C11430;--ok:#1e7a3c;--warn:#a15c00;--bad:#C11430;--chk:#2a5fa8;--offbg:#ecebe7;',
-'position:fixed;top:0;right:0;bottom:0;width:min(580px,100vw);z-index:2147483000;background:var(--bg);color:var(--ink);',
-'box-shadow:-6px 0 30px rgba(0,0,0,.25);overflow:auto;font:15px/1.5 "Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;text-align:left}',
-'@media (prefers-color-scheme:dark){#ID{--ink:#f2f1ee;--ink2:#cfcdc7;--mute:#a6a29b;--bg:#15161a;--panel:#1d1f24;--line:#35353c;--ok:#5fd08a;--warn:#f0b04a;--bad:#ff6b80;--chk:#8bb6ff;--offbg:#2a2b30}}',
+'--okbg:#e8f3ec;--warnbg:#fbf0e1;--badbg:#fbe7ea;--chkbg:#e7eef8;',
+'position:fixed;top:0;right:0;bottom:0;width:min(560px,100vw);z-index:2147483000;background:var(--bg);color:var(--ink);',
+'box-shadow:-6px 0 30px rgba(0,0,0,.25);overflow:auto;font:15px/1.45 "Segoe UI","Helvetica Neue",Helvetica,Arial,sans-serif;text-align:left}',
+'@media (prefers-color-scheme:dark){#ID{--ink:#f2f1ee;--ink2:#cfcdc7;--mute:#a6a29b;--bg:#15161a;--panel:#1d1f24;--line:#35353c;--ok:#5fd08a;--warn:#f0b04a;--bad:#ff6b80;--chk:#8bb6ff;--offbg:#2a2b30;--okbg:#17291f;--warnbg:#2e2414;--badbg:#33171c;--chkbg:#172238}}',
 '#ID *{box-sizing:border-box}',
-'#ID .hd{background:var(--char);color:#fff;padding:14px 18px;border-bottom:5px solid var(--red);position:sticky;top:0;z-index:2}',
-'#ID .hd .t{font-size:18px;font-weight:700}',
-'#ID .hd .s{font-size:12.5px;color:#cfcfcf;margin-top:2px}',
-'#ID .hd button{position:absolute;top:10px;background:none;border:1px solid #777;color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px}',
+'#ID .hd{background:var(--char);color:#fff;padding:12px 16px;border-bottom:5px solid var(--red);position:sticky;top:0;z-index:2}',
+'#ID .hd .t{font-size:17px;font-weight:700}',
+'#ID .hd .s{font-size:12px;color:#cfcfcf;margin-top:1px}',
+'#ID .hd button{position:absolute;top:10px;background:none;border:1px solid #777;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:14px}',
 '#ID .hd .x{right:12px} #ID .hd .p{right:56px}',
-'#ID .bd{padding:14px 18px 40px}',
-'#ID .sum{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 6px}',
-'#ID .pill{border-radius:999px;padding:3px 11px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--panel)}',
-'#ID h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin:22px 0 4px;padding-bottom:5px;border-bottom:1px solid var(--line)}',
-'#ID .src{font-size:12.5px;color:var(--mute);margin:0 0 8px}',
-'#ID .row{border:1px solid var(--line);border-radius:9px;margin:0 0 9px;background:var(--panel)}',
-'#ID .row>summary{list-style:none;cursor:pointer;display:flex;gap:11px;align-items:flex-start;padding:11px 13px}',
+'#ID .bd{padding:12px 16px 40px}',
+'#ID .cname{font-size:16px;font-weight:700;margin:0 0 8px}',
+'#ID .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 6px}',
+'#ID .tile{border:0;border-radius:9px;padding:8px 6px 7px;cursor:pointer;text-align:center;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:3px}',
+'#ID .tile .ti{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}',
+'#ID .tile .tl{font-size:12.5px;font-weight:600;line-height:1.2}',
+'#ID .tile.ok{background:var(--okbg)} #ID .tile.warn{background:var(--warnbg)} #ID .tile.bad{background:var(--badbg)} #ID .tile.chk{background:var(--chkbg)}',
+'#ID .ok .ic,#ID .ok .ti{background:var(--ok)} #ID .warn .ic,#ID .warn .ti{background:var(--warn)} #ID .bad .ic,#ID .bad .ti{background:var(--bad)} #ID .chk .ic,#ID .chk .ti{background:var(--chk)}',
+'#ID .tile:hover{outline:2px solid var(--line)}',
+'#ID .when{font-size:12px;color:var(--mute);margin:2px 0 4px}',
+'#ID h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:18px 0 6px;display:flex;align-items:center;gap:7px}',
+'#ID h3.bad{color:var(--bad)} #ID h3.warn{color:var(--warn)} #ID h3.chk{color:var(--chk)} #ID h3.ok{color:var(--ok)}',
+'#ID .row{border:1px solid var(--line);border-radius:9px;margin:0 0 6px;background:var(--panel)}',
+'#ID .row>summary{list-style:none;cursor:pointer;display:flex;gap:10px;align-items:center;padding:8px 11px}',
 '#ID .row>summary::-webkit-details-marker{display:none}',
-'#ID .ic{flex:0 0 26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px;margin-top:1px}',
-'#ID .ok .ic{background:var(--ok)} #ID .warn .ic{background:var(--warn)} #ID .bad .ic{background:var(--bad)} #ID .chk .ic{background:var(--chk)}',
-'#ID .nm{font-weight:700;color:var(--ink)}',
-'#ID .why{font-size:13.5px;color:var(--ink2)}',
-'#ID .res{font-size:13.5px;margin-top:2px}',
-'#ID .ok .res{color:var(--ok)} #ID .warn .res{color:var(--warn)} #ID .bad .res{color:var(--bad)} #ID .chk .res{color:var(--chk)}',
-'#ID .det{padding:0 13px 12px 50px;font-size:13.5px;color:var(--ink2)}',
+'#ID .ic{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px}',
+'#ID .txt{flex:1;min-width:0}',
+'#ID .nm{font-weight:700;color:var(--ink);font-size:14.5px}',
+'#ID .res{font-size:13px;color:var(--ink2)}',
+'#ID .bad .res{color:var(--bad)} #ID .warn .res{color:var(--warn)}',
+'#ID .tag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-left:6px;font-weight:600;vertical-align:1px}',
+'#ID .chev{color:var(--mute);font-size:12px}',
+'#ID details[open]>summary .chev{transform:rotate(90deg)}',
+'#ID .det{padding:0 12px 10px 43px;font-size:13.5px;color:var(--ink2)}',
+'#ID .det .why{color:var(--mute);font-size:12.5px;margin:0 0 6px}',
 '#ID .det ul{margin:4px 0 8px;padding-left:18px} #ID .det li{margin:2px 0}',
+'#ID .more>summary{cursor:pointer;color:var(--chk);font-size:13px;margin:2px 0}',
 '#ID .mu{color:var(--mute)}',
 '#ID a{color:var(--chk)}',
 '#ID .fix{display:inline-block;margin-top:4px;font-weight:700}',
-'#ID .note{font-size:12.5px;color:var(--mute);margin-top:18px}',
-'#ID .banner{border:1px solid var(--warn);border-radius:9px;padding:9px 12px;margin:10px 0 0;font-size:13.5px;color:var(--ink)}',
-'#ID .teams{display:inline-block;background:#5B5FC7;color:#fff!important;text-decoration:none;border-radius:5px;padding:5px 12px;font-weight:700}',
+'#ID .note{font-size:12px;color:var(--mute);margin-top:18px}',
+'#ID .banner{border:1px solid var(--warn);border-radius:9px;padding:8px 11px;margin:8px 0 0;font-size:13px;color:var(--ink)}',
+'#ID .teams{display:inline-block;background:#5B5FC7;color:#fff!important;text-decoration:none;border-radius:5px;padding:4px 11px;font-weight:700}',
 '#ID .load{padding:30px 0;color:var(--ink2)}',
-'#ID .yes{margin:8px 0 2px;background:var(--ok);color:#fff;border:0;border-radius:6px;padding:6px 14px;font-weight:700;font-size:14px;cursor:pointer}',
-'#ID .undo{background:none;border:0;color:var(--chk);text-decoration:underline;cursor:pointer;font-size:13.5px;padding:0}',
-'#ID .strip{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 6px}',
-'#ID .wk{width:46px;border:1px solid var(--line);border-radius:6px;text-align:center;padding:3px 0 2px;background:var(--bg)}',
-'#ID .wk b{display:block;font-size:15px;line-height:1.2} #ID .wk span{display:block;font-size:10.5px;color:var(--mute)}',
-'#ID .wk.ok b{color:var(--ok)} #ID .wk.gap{border-color:var(--warn)} #ID .wk.gap b{color:var(--warn)}',
+'#ID .yes{flex:0 0 auto;background:var(--ok);color:#fff;border:0;border-radius:6px;padding:5px 11px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}',
+'#ID .undo{background:none;border:0;color:var(--chk);text-decoration:underline;cursor:pointer;font-size:12.5px;padding:0}',
+'#ID .strip{display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px 43px}',
+'#ID .wk{width:38px;border:1px solid var(--line);border-radius:5px;text-align:center;padding:2px 0 1px;background:var(--bg)}',
+'#ID .wk b{display:block;font-size:13.5px;line-height:1.2} #ID .wk span{display:block;font-size:9.5px;color:var(--mute)}',
+'#ID .wk.ok b{color:var(--ok)} #ID .wk.gap{border-color:var(--warn);background:var(--warnbg)} #ID .wk.gap b{color:var(--warn)}',
 '#ID .wk.off,#ID .wk.short,#ID .wk.exc{background:var(--offbg)} #ID .wk.off b,#ID .wk.short b,#ID .wk.exc b{color:var(--mute)}',
 '#ID .wk.now{border-style:dashed}',
-'#ID .key{font-size:12px;color:var(--mute);margin-bottom:8px}',
-'#ID .gap-row{border-top:1px solid var(--line);padding:7px 0}',
+'#ID .gap-row{border-top:1px solid var(--line);padding:6px 0}',
 '#ID .gap-row label{display:flex;gap:7px;align-items:center;margin-top:3px;color:var(--ink)}',
+'#ID .donel{margin:0;padding:0;list-style:none} #ID .donel li{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13.5px} #ID .donel .ic{flex-basis:18px;height:18px;font-size:11px}',
+'#ID .next{border-left:5px solid var(--ok);background:var(--panel);border-radius:0 9px 9px 0;padding:9px 12px;margin:14px 0 4px;font-size:13.5px}',
 '@media print{body>*:not(#ID){display:none!important}#ID{position:static;width:auto;box-shadow:none;overflow:visible}#ID .hd{position:static}#ID .hd button,#ID .yes,#ID .undo{display:none}#ID details{break-inside:avoid}}'
 ].join('\n').replace(/#ID/g, '#' + ID);
 
-var GROUPS = [
-  ['req', 'Required in every RJ course', 'From <a href="' + PD + 'what-every-course-must-have-the-rj-baseline" target="_blank" rel="noopener">What Every Course Must Have: the RJ Baseline</a>.'],
-  ['exp', 'Expected by the principal', 'From Jimmy Tricco, on the same Baseline page.'],
-  ['route', 'Recommended: one route for students', 'From <a href="' + PD + 'one-route-for-students-pick-your-modules-pattern" target="_blank" rel="noopener">One Route for Students</a>. Good practice, not required.']
-];
 var ICON = { ok: '✓', warn: '!', bad: '✕', chk: '?' };
 var LABEL = { ok: 'Done', warn: 'Worth a look', bad: 'Needs a fix', chk: 'Check yourself' };
+/* The tile word for each check: what a teacher scans for. */
+var TILE = { mod: 'Modules', missing: 'Zero for missing', due: 'Due dates', dates: 'Usable dates', grades: 'Grades posted', math: 'Gradebook math',
+  ai: 'AI policy', acc: 'Accommodations', weekly: 'Graded weekly', own: 'You grade it', menu: 'Short menu', dated: 'Dated classes', empty: 'No empty modules' };
+var TAG = { req: 'Required', exp: 'Expected', route: 'Recommended' };
+var BASELINE = PD + 'what-every-course-must-have-the-rj-baseline';
 
 function nextStep(data) {
-  var L = data.ladder, reqBad = data.results.some(function (r) { return r.group === 'req' && r.status === 'bad'; });
-  if (reqBad) return { level: 'Foundations', color: '#555', line: 'Finish the red items first. They’re what every RJ course needs, and they take care of you as well as your students.', tips: [] };
+  var L = data.ladder;
   var enh = [];
-  if (L.verbShare < 0.5) enh.push('<strong>Start each title with what students do</strong>: READ, DO, REFLECT, SHOW. About ' + Math.round(L.verbShare * 100) + '% of your module items do now.');
-  if (!L.usesHeaders) enh.push('<strong>Add text headers inside your modules</strong> for each lesson, or for each step of the Ignatian pattern (Context, Experience, Reflection, Action, Evaluation).');
-  if (!L.usesOrder) enh.push('<strong>Make students go in order</strong> where the order matters: the next item opens when they finish the one before it.');
-  if (enh.length >= 2) return { level: 'Enhance', color: '#2a6ebb', line: 'Your course is easy to find your way around. Next: turn each week or unit into a learning arc.', tips: enh,
-    links: [[PD + 'the-ipp-your-way', 'The IPP, Your Way'], [PD + 'build-a-week-an-ipp-module-stage-by-stage', 'Build a Week, Stage by Stage'], [PD + 'module-requirements-make-your-order-the-path', 'Make Your Order the Path']] };
-  var dep = [];
-  if (!L.usesMinScore) dep.push('<strong>Add a short check students must pass to move on</strong> (8 of 10, say), with retakes allowed and a re-teach video just before it.');
-  if (L.rubricShare < 0.25) dep.push('<strong>Put a rubric on your bigger assignments</strong> so you see the thinking, not just whether it was turned in. ' + L.withRubric + ' of ' + L.graded + ' graded items have one now.');
-  dep.push('<strong>Read your quiz numbers</strong> after each check to decide what to re-teach.');
-  if (!L.usesMinScore || L.rubricShare < 0.25) return { level: 'Deepen', color: '#2e7d32', line: 'Your modules are shaped well. Next: build in ways to know if it’s working.', tips: dep,
-    links: [[PD + 'quiz-data-coach-reading-your-own-numbers', 'Reading Your Own Quiz Numbers'], [PD + 'two-things-called-mastery', 'Two Things Called Mastery'], [PD + 'a-student-is-stuck-in-a-module', 'A Student Is Stuck in a Module']] };
-  return { level: 'Innovate', color: '#7b3fa0', line: 'You’re using the tools well. What would you like to try? This part is yours; one possibility:', tips: [
-    L.mastery ? '<strong>Mastery Paths is on in this course.</strong> Try letting a score on one check send each student to the next step that fits them.' : '<strong>Mastery Paths</strong> lets a score on one check send each student to the next step that fits them.',
-    '<strong>Let students choose</strong> how they investigate a question, or <strong>write the review questions</strong> themselves.'],
-    links: [[PD + 'mastery-paths-step-by-step-each-student-gets-the-next-step-that-fits', 'Mastery Paths, Step by Step'], [PD + 'designing-the-thinking', 'Designing the Thinking']] };
+  if (L.verbShare < 0.5) enh.push('Start each title with what students do: READ, DO, REFLECT, SHOW.');
+  if (!L.usesHeaders) enh.push('Add a text header for each lesson inside your modules.');
+  if (!L.usesOrder) enh.push('Make students go in order where the order matters.');
+  if (enh.length >= 2) return { level: 'Enhance', color: '#2a6ebb', tip: enh[0], link: [PD + 'build-a-week-an-ipp-module-stage-by-stage', 'Build a Week, Stage by Stage'] };
+  if (!L.usesMinScore) return { level: 'Deepen', color: '#2e7d32', tip: 'Add a short check students pass to move on (8 of 10), with retakes.', link: [PD + 'two-things-called-mastery', 'Two Things Called Mastery'] };
+  if (L.rubricShare < 0.25) return { level: 'Deepen', color: '#2e7d32', tip: 'Put a rubric on your bigger assignments.', link: [PD + 'quiz-data-coach-reading-your-own-numbers', 'Reading Your Own Quiz Numbers'] };
+  return { level: 'Innovate', color: '#7b3fa0', tip: 'Let a score on one check send each student to the next step that fits them.', link: [PD + 'mastery-paths-step-by-step-each-student-gets-the-next-step-that-fits', 'Mastery Paths, Step by Step'] };
 }
 
+function strip(r) {
+  var W = r.weeks;
+  if (!W || !W.list.length) return '';
+  return '<div class="strip" title="Each box is a week; the number is graded items due">' + W.list.map(function (wk) {
+    var n = wk.scored.length, title = 'Week of ' + wk.range + ': ' + (wk.state === 'off' ? wk.note : plural(n, 'graded item') + ' due' + (wk.note ? ' (' + wk.note + ')' : '') + (wk.state === 'exc' ? ' (you marked a reason)' : ''));
+    return '<div class="wk ' + wk.state + '" title="' + esc(title) + '"><b>' + (wk.state === 'off' ? '–' : n) + '</b><span>' + esc(wk.label) + '</span></div>';
+  }).join('') + '</div>';
+}
 function weeklyDetail(r) {
   var W = r.weeks;
   if (!W || !W.list.length) return '';
-  var h = '<div class="strip">' + W.list.map(function (wk) {
-    var n = wk.scored.length, title = 'Week of ' + wk.range + ': ' + (wk.state === 'off' ? wk.note : plural(n, 'graded item') + ' due' + (wk.note ? ' (' + wk.note + ')' : ''));
-    return '<div class="wk ' + wk.state + '" title="' + esc(title) + '"><b>' + (wk.state === 'off' ? '–' : n) + '</b><span>' + esc(wk.label) + '</span></div>';
-  }).join('') + '</div>';
-  h += '<div class="key">Each box is a week (Monday’s date) with the number of graded items due. Grey: a break' + (W.list.some(function (w) { return w.state === 'short'; }) ? ', or a short week with nothing graded' : '') + (W.list.some(function (w) { return w.state === 'exc'; }) ? ', or a week you marked' : '') + '. Dashed: this week, still in progress.</div>';
-  if (W.note) h += '<div class="mu">' + esc(W.note) + '</div>';
-  if (W.undated) h += '<div class="mu">' + plural(W.undated, 'graded item has', 'graded items have') + ' no due date, so ' + (W.undated === 1 ? 'it can’t' : 'they can’t') + ' be counted in any week. Give ' + (W.undated === 1 ? 'it' : 'them') + ' a due date (see “Every graded item has a due date”) and ' + (W.undated === 1 ? 'it' : 'they') + ' will show up here.</div>';
+  var h = '<div class="mu" style="font-size:12.5px">Each box is a week with the number of graded items due. Grey: a break' + (W.list.some(function (w) { return w.state === 'exc'; }) ? ' or a week you marked' : '') + '. Dashed: this week.</div>';
+  if (W.undated) h += '<div class="mu" style="font-size:12.5px">' + plural(W.undated, 'graded item has', 'graded items have') + ' no due date, so ' + (W.undated === 1 ? 'it isn’t' : 'they aren’t') + ' counted in any week yet.</div>';
   if (r.gaps && r.gaps.length) {
     h += r.gaps.map(function (g) {
-      return '<div class="gap-row"><strong>Week of ' + esc(g.range) + '</strong>: ' +
-        (g.other.length ? 'only ' + esc(g.other.slice(0, 3).join('; ')) + (g.other.length > 3 ? '; and ' + (g.other.length - 3) + ' more' : '') + ' due.' : 'nothing at all was due.') +
-        '<label><input type="checkbox" data-wk="' + esc(g.key) + '"> This week had a reason (a retreat, an immersion, testing, a short week)</label></div>';
+      return '<div class="gap-row"><strong>' + esc(g.range) + '</strong>: ' +
+        (g.other.length ? 'only ' + plural(g.other.length, 'complete/incomplete or 0-point item') + ' due.' : 'nothing due.') +
+        '<label><input type="checkbox" data-wk="' + esc(g.key) + '"> This week had a reason (retreat, immersion, testing)</label></div>';
     }).join('');
   }
   var ex = W.list.filter(function (w) { return w.state === 'exc'; });
-  if (ex.length) h += '<div class="gap-row mu">Weeks you marked: ' + ex.map(function (w) { return esc(w.range) + ' <button class="undo" type="button" data-unwk="' + esc(w.key) + '">undo</button>'; }).join(', ') + '</div>';
-  h += '<div class="mu" style="margin-top:6px">Counts anything worth points that you score. Complete/incomplete, 0-point and ungraded items don’t count. Work done on paper counts once it’s in Canvas with a due date.</div>';
+  if (ex.length) h += '<div class="gap-row mu">Marked: ' + ex.map(function (w) { return esc(w.range) + ' <button class="undo" type="button" data-unwk="' + esc(w.key) + '">undo</button>'; }).join(', ') + '</div>';
   return h;
 }
 
 function render(box, data, store) {
   var body = box.querySelector('.bd');
-  if (data.skipped) { body.innerHTML = '<div style="font-size:16px;font-weight:700;margin:0 0 6px">' + esc(data.course.name) + '</div><p class="load" style="padding-top:6px">' + esc(data.notClass) + '</p><p class="note">Questions? <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a></p>'; return; }
+  if (data.skipped) { body.innerHTML = '<div class="cname">' + esc(data.course.name) + '</div><p class="load" style="padding-top:6px">' + esc(data.notClass) + '</p><p class="note">Questions? <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a></p>'; return; }
   evaluate(data, store);
-  var count = { ok: 0, warn: 0, bad: 0, chk: 0 };
-  data.results.forEach(function (r) { count[r.status]++; });
-  var h = '<div style="font-size:16px;font-weight:700;margin:0 0 6px">' + esc(data.course.name) + '</div>' +
-    '<div class="sum">' + ['bad', 'warn', 'chk', 'ok'].filter(function (s) { return count[s]; }).map(function (s) { return '<span class="pill" style="color:var(--' + s + ')">' + ICON[s] + ' ' + count[s] + ' ' + LABEL[s] + '</span>'; }).join('') + '</div>' +
-    '<div class="why">Checked ' + new Date(data.checkedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '. Click any row for details and the fix.</div>';
+  var rs = data.results;
+  var h = '<div class="cname">' + esc(data.course.name) + '</div>';
+  /* Scorecard: one tile per check, in the Baseline's order. */
+  h += '<div class="tiles">' + rs.map(function (r) {
+    return '<button class="tile ' + r.status + '" type="button" data-go="' + esc(r.key) + '" title="' + esc(LABEL[r.status] + ': ' + r.name) + '"><span class="ti">' + ICON[r.status] + '</span><span class="tl">' + esc(TILE[r.key] || r.name) + '</span></button>';
+  }).join('') + '</div>';
+  h += '<div class="when">Checked ' + new Date(data.checkedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '. Click a tile or a row for details.</div>';
   if (!data.course.students) h += '<div class="banner">No students are enrolled yet, so some checks have nothing to look at.</div>';
-  var nx = nextStep(data);
-  h += '<div style="border-left:6px solid ' + nx.color + ';background:var(--panel);border-radius:0 9px 9px 0;padding:11px 14px;margin:14px 0 4px">' +
-    '<div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)">Your next step</div>' +
-    '<div style="font-weight:700;font-size:16px;margin:2px 0 4px"><span style="background:' + nx.color + ';color:#fff;border-radius:4px;padding:1px 8px;font-size:13px;margin-right:6px">' + esc(nx.level.toUpperCase()) + '</span>' + esc(nx.line) + '</div>' +
-    (nx.tips.length ? '<ul style="margin:6px 0 6px;padding-left:18px;font-size:13.5px;color:var(--ink2)">' + nx.tips.map(function (t) { return '<li style="margin:3px 0">' + t + '</li>'; }).join('') + '</ul>' : '') +
-    (nx.links ? '<div style="font-size:13.5px">Show me how: ' + nx.links.map(function (l) { return '<a href="' + esc(l[0]) + '" target="_blank" rel="noopener">' + esc(l[1]) + '</a>'; }).join(' · ') + ' · <a href="' + PD + 'one-route-for-students-pick-your-modules-pattern#levels" target="_blank" rel="noopener">The same week at four levels</a></div>' : '') +
-    '</div>';
-  GROUPS.forEach(function (g) {
-    var rs = data.results.filter(function (r) { return r.group === g[0]; });
-    if (!rs.length) return;
-    h += '<h3>' + g[1] + '</h3><div class="src">' + g[2] + '</div>';
-    rs.forEach(function (r) {
-      var detail = r.weekly ? weeklyDetail(r) : (r.detail || '');
-      if (r.self) {
-        if (r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
-        else detail += '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>';
-      }
-      if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
-      var result = r.self && r.done ? 'You confirmed this one yourself.' : r.result;
-      var open = r.status === 'bad' || (r.weekly && r.status === 'warn') || (r.self && !r.done);
-      h += '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' data-key="' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span><span class="nm">' + esc(r.name) + '</span><div class="res">' + esc(result) + '</div><div class="why">' + esc(r.why) + '</div></span></summary>' +
-        (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
-    });
-  });
-  h += '<p class="note">This tool only reads your course; it never changes anything. Your ticks stay on this computer. Questions? <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a><br>Raider Course Check ' + VERSION + '</p>';
+
+  function row(r, open) {
+    var detail = '';
+    if (r.weekly) detail = weeklyDetail(r);
+    else {
+      detail = '<div class="why">' + esc(r.why) + '</div>' + (r.detail || '');
+      if (r.more) detail += '<details class="more"><summary>' + esc(r.moreLabel || 'Show more') + '</summary>' + r.more + '</details>';
+    }
+    if (r.self && r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
+    if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
+    var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
+    var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
+    return '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' id="rjcc-' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span class="txt"><span class="nm">' + esc(r.name) + '</span><span class="tag">' + TAG[r.group] + '</span><div class="res">' + esc(res) + '</div></span>' + yes + '<span class="chev">▶</span></summary>' +
+      (r.weekly ? strip(r) : '') + (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
+  }
+  var bad = rs.filter(function (r) { return r.status === 'bad'; }),
+    warn = rs.filter(function (r) { return r.status === 'warn'; }),
+    chk = rs.filter(function (r) { return r.status === 'chk'; }),
+    ok = rs.filter(function (r) { return r.status === 'ok'; });
+  if (bad.length) h += '<h3 class="bad">✕ Needs a fix · ' + bad.length + '</h3>' + bad.map(function (r) { return row(r, bad.length <= 2); }).join('');
+  if (warn.length) h += '<h3 class="warn">! Worth a look · ' + warn.length + '</h3>' + warn.map(function (r) { return row(r, false); }).join('');
+  if (chk.length) h += '<h3 class="chk">? Check yourself · ' + chk.length + '</h3>' + chk.map(function (r) { return row(r, false); }).join('');
+  if (!bad.length) { var nx = nextStep(data); h += '<div class="next" style="border-left-color:' + nx.color + '"><strong>Next step · ' + esc(nx.level) + ':</strong> ' + esc(nx.tip) + ' <a href="' + esc(nx.link[0]) + '" target="_blank" rel="noopener">' + esc(nx.link[1]) + ' →</a></div>'; }
+  if (ok.length) h += '<h3 class="ok">✓ Done · ' + ok.length + '</h3><details class="row ok" id="rjcc-done"><summary><span class="txt"><span class="res">' + esc(ok.map(function (r) { return TILE[r.key] || r.name; }).join(' · ')) + '</span></span><span class="chev">▶</span></summary><div class="det" style="padding-left:12px">' +
+    ok.map(function (r) { return row(r, false); }).join('') + '</div></details>';
+  h += '<p class="note">Checks come from <a href="' + BASELINE + '" target="_blank" rel="noopener">the RJ Baseline</a> and <a href="' + PD + 'one-route-for-students-pick-your-modules-pattern" target="_blank" rel="noopener">One Route for Students</a>. Read only; your ticks stay on this computer. <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a> · ' + VERSION + '</p>';
   body.innerHTML = h;
   function rerender() { saveStore(data.cid, store); render(box, data, store); }
-  body.querySelectorAll('[data-self]').forEach(function (b) { b.onclick = function () { store.self[b.dataset.self] = new Date().toISOString(); rerender(); }; });
+  body.querySelectorAll('[data-self]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); store.self[b.dataset.self] = new Date().toISOString(); rerender(); }; });
   body.querySelectorAll('[data-unself]').forEach(function (b) { b.onclick = function () { delete store.self[b.dataset.unself]; rerender(); }; });
-  body.querySelectorAll('input[data-wk]').forEach(function (cb) { cb.onchange = function () { if (cb.checked) store.wk[cb.dataset.wk] = 1; rerender(); }; });
-  body.querySelectorAll('[data-unwk]').forEach(function (b) { b.onclick = function () { delete store.wk[b.dataset.unwk]; rerender(); }; });
+  body.querySelectorAll('input[data-wk]').forEach(function (cb) { cb.onchange = function () { if (cb.checked) store.wk[cb.dataset.wk] = 1; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
+  body.querySelectorAll('[data-unwk]').forEach(function (b) { b.onclick = function () { delete store.wk[b.dataset.unwk]; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
+  body.querySelectorAll('[data-go]').forEach(function (t) { t.onclick = function () {
+    var el = box.querySelector('#rjcc-' + t.dataset.go); if (!el) return;
+    var done = box.querySelector('#rjcc-done'); if (done && done.contains(el)) done.open = true;
+    el.open = true; box.scrollTo({ top: el.offsetTop - 70, behavior: 'smooth' });
+  }; });
 }
 
 function open() {
@@ -768,7 +782,7 @@ function open() {
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', 'Raider Course Check');
   box.innerHTML = '<div class="hd"><div class="t">Raider Course Check</div><div class="s">Read only. Nothing in your course is changed.</div>' +
-    '<button class="p" type="button">Print</button><button class="x" type="button" aria-label="Close">✕</button></div><div class="bd"><div class="load">Checking your class…</div></div>';
+    '<button class="p" type="button">Print</button><button class="x" type="button" aria-label="Close">✕</button></div><div class="bd"><div class="load">Checking your class… (a few seconds)</div></div>';
   document.body.appendChild(box);
   box.querySelector('.x').onclick = function () { box.remove(); css.remove(); };
   box.querySelector('.p').onclick = function () { box.querySelectorAll('details').forEach(function (d) { d.open = true; }); window.print(); };
