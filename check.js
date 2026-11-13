@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.2.0';
+var VERSION = '2.2.1';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -293,7 +293,7 @@ async function analyze(cid, now) {
       ul(minorOut.map(function (a) { return modFix(a) + ' <span class="mu">' + esc(minorWhy(a)) + '</span>'; })
         .concat(outTopics.map(function (t) { return '<a href="' + esc(t.html_url) + '" target="_blank" rel="noopener">' + esc(t.title) + '</a> <span class="mu">(discussion)</span>'; }))
         .concat(outQuizzes.map(function (q) { return '<a href="' + esc(q.html_url) + '" target="_blank" rel="noopener">' + esc(q.title) + '</a> <span class="mu">(' + (q.quiz_type === 'survey' ? 'survey' : 'practice quiz') + ')</span>'; }))
-        .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span>'; })), 12) +
+        .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span> <a class="fixit" href="' + esc(MODS) + '" target="_blank" rel="noopener">Fix it</a>'; })), 12) +
       (orphanPages.length ? '<div class="mu">A page from an old version of the course? Unpublish it instead.</div>' : '');
   }
   if (linkedPages.length) r1more += '<div class="mu">' + plural(linkedPages.length, 'page') + ' outside modules ' + (linkedPages.length === 1 ? 'is' : 'are') + ' linked from your home page, syllabus or a module page, so students can reach ' + (linkedPages.length === 1 ? 'it' : 'them') + '. That’s fine.</div>';
@@ -349,7 +349,7 @@ async function analyze(cid, now) {
   else add({ key: 'due', group: 'req', status: 'ok', name: 'Every graded item has a due date', why: DW, result: 'All ' + graded.length + ' have one.' });
 
   /* Dates that keep work off the list or make it late before students can turn it in. */
-  var dBad = [], dWarn = [];
+  var dBad = [], dWarn = [], dK = {};
   var soon = now.getTime() + 3 * DAY, recent = now.getTime() - 14 * DAY, horizon = now.getTime() + 21 * DAY;
   assignments.forEach(function (a) {
     if (ATTENDANCE.test(a.name || '')) return;
@@ -357,31 +357,31 @@ async function analyze(cid, now) {
     if (!a.published) {
       if (!isGraded(a)) return;
       var close = ds.map(function (d) { return parse(d.due_at); }).filter(function (d) { return d && d.getTime() <= soon && d.getTime() >= recent; }).sort(function (x, y) { return x - y; })[0];
-      if (close) dWarn.push(aEdit(a, close < now ? '(not published, and it was due ' + fmtDayTime(close) + ')' : '(not published, and it’s due ' + fmtDayTime(close) + ')'));
+      if (close) dK.unpub = dWarn.push(aEdit(a, close < now ? '(not published, and it was due ' + fmtDayTime(close) + ')' : '(not published, and it’s due ' + fmtDayTime(close) + ')'));
       return;
     }
     for (var i = 0; i < ds.length; i++) {
       var d = ds[i], due = parse(d.due_at), lock = parse(d.lock_at), open = parse(d.unlock_at);
       var who = scopeOf(d) !== 'all' && d.title ? ' for ' + d.title : '';
-      if (due && lock && lock < due) { dBad.push(aEdit(a, '(locks ' + fmtDayTime(lock) + who + ', before it’s due ' + fmtDayTime(due) + ')')); return; }
-      if (due && open && open > due) { dBad.push(aEdit(a, '(opens ' + fmtDayTime(open) + who + ', after it’s due ' + fmtDayTime(due) + ')')); return; }
+      if (due && lock && lock < due) { dK.window = dBad.push(aEdit(a, '(locks ' + fmtDayTime(lock) + who + ', before it’s due ' + fmtDayTime(due) + ')')); return; }
+      if (due && open && open > due) { dK.window = dBad.push(aEdit(a, '(opens ' + fmtDayTime(open) + who + ', after it’s due ' + fmtDayTime(due) + ')')); return; }
     }
     if (termStart && termEnd && semester) {
       var outside = ds.filter(function (d) { return scopeOf(d) !== 'some'; }).map(function (d) { return parse(d.due_at); })
         .filter(function (d) { return d && (d.getTime() < termStart.getTime() - DAY || d.getTime() > termEnd.getTime() + DAY); })[0];
-      if (outside) { dBad.push(aEdit(a, '(due ' + outside.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ', outside this semester; often left over from copying a course)')); return; }
+      if (outside) { dK.outside = dBad.push(aEdit(a, '(due ' + outside.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ', outside this semester; often left over from copying a course)')); return; }
     }
     if (isGraded(a)) {
       var mid = ds.filter(function (d) { return scopeOf(d) !== 'some'; }).map(function (d) { return parse(d.due_at); })
         .filter(function (d) { return d && d > now && d.getTime() <= horizon && isMidnight(d); })[0];
-      if (mid) { var nb = addDays(mid, -1); dWarn.push(aEdit(a, '(due 12:00 AM ' + fmtDay(mid) + ', the very start of ' + mid.toLocaleDateString('en-US', { weekday: 'long' }) + '. If you meant ' + nb.toLocaleDateString('en-US', { weekday: 'long' }) + ' night, 11:59 PM is clearer.)')); }
+      if (mid) { var nb = addDays(mid, -1); dK.midnight = dWarn.push(aEdit(a, '(due 12:00 AM ' + fmtDay(mid) + ', the very start of ' + mid.toLocaleDateString('en-US', { weekday: 'long' }) + '. If you meant ' + nb.toLocaleDateString('en-US', { weekday: 'long' }) + ' night, 11:59 PM is clearer.)')); }
     }
   });
   var UW = 'A date that locks early, opens late or sits outside the semester makes work late before students can turn it in, or keeps it off their list.';
-  if (dBad.length) add({ key: 'dates', group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
+  if (dBad.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
     result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
     detail: ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
-  else if (dWarn.length) add({ key: 'dates', group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
+  else if (dWarn.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
     result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn) });
   else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
 
@@ -426,47 +426,47 @@ async function analyze(cid, now) {
     if (hList.length) gr.push(plural(hList.length, 'item has', 'items have') + ' grades hidden from students for over a week');
     if (wList.length) gr.push(plural(wList.length, 'item has', 'items have') + ' work waiting more than two weeks for a grade');
     if (!gr.length) add({ key: 'grades', group: 'req', status: 'ok', name: 'Grades kept up to date, and posted', why: GW, result: 'Nothing waiting, nothing hidden.' });
-    else add({ key: 'grades', group: 'req', status: oldHidden ? 'bad' : 'warn', name: 'Grades kept up to date, and posted', why: GW,
+    else add({ key: 'grades', kinds: { hidden: hList.length, waiting: wList.length }, group: 'req', status: oldHidden ? 'bad' : 'warn', name: 'Grades kept up to date, and posted', why: GW,
       result: gr.join('; ') + '.', detail: gd, fixHref: GFIX, fixText: 'Set up your gradebook' });
   } catch (e) {
     add({ key: 'grades', group: 'req', status: 'chk', name: 'Grades kept up to date, and posted', why: GW, result: 'Couldn’t read submissions. Check your Gradebook yourself.', fixHref: GFIX, fixText: 'Set up your gradebook' });
   }
 
   /* The gradebook does the math you mean (Canvas is the single source of truth for grades). */
-  var mBad = [], mWarn = [];
+  var mBad = [], mWarn = [], mK = {};
   var weighted = !!course.apply_assignment_group_weights;
   var AIX = base + '/courses/' + cid + '/assignments';
   /* Weights only matter once the class has graded work in Canvas. */
   if (weighted && groups.length && graded.length) {
     var tot = groups.reduce(function (s, g) { return s + (g.group_weight || 0); }, 0);
-    if (tot === 0) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(“Weight final grade based on assignment groups” is on, but every group is set to 0%. Set the weights, or turn weighting off.)</span>');
-    else if (Math.abs(tot - 100) > 0.05) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(add up to ' + Math.round(tot * 100) / 100 + '%, not 100%' + (tot < 100 ? '; Canvas scales them up, so each group counts for more than it says)' : '; grades can come out higher than they should)') + '</span>');
+    if (tot === 0) mK.weights = mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(“Weight final grade based on assignment groups” is on, but every group is set to 0%. Set the weights, or turn weighting off.)</span>');
+    else if (Math.abs(tot - 100) > 0.05) mK.weights = mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(add up to ' + Math.round(tot * 100) / 100 + '%, not 100%' + (tot < 100 ? '; Canvas scales them up, so each group counts for more than it says)' : '; grades can come out higher than they should)') + '</span>');
     groups.forEach(function (g) {
       if ((g.group_weight || 0) !== 0) return;
       var n = graded.filter(function (a) { return String(a.assignment_group_id) === String(g.id); }).length;
-      if (n) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count)</span>');
+      if (n) mK.weights = mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count)</span>');
     });
   }
   if (!weighted && groups.length > 1 && graded.length) {
     var wsum = groups.reduce(function (s, g) { return s + (g.group_weight || 0); }, 0);
-    if (wsum > 0) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(your groups have weights, but “Weight final grade based on assignment groups” is off, so Canvas grades by total points. Fine if they’re leftovers from a copied course.)</span>');
+    if (wsum > 0) mK.weightsOff = mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(your groups have weights, but “Weight final grade based on assignment groups” is off, so Canvas grades by total points. Fine if they’re leftovers from a copied course.)</span>');
   }
   pubAsg.forEach(function (a) {
     var rp = a.rubric_settings && a.rubric_settings.points_possible, pts = a.points_possible || 0;
     /* Many teachers type the score and never fill in the rubric, so a mismatch is only worth a look. */
     if (a.use_rubric_for_grading && typeof rp === 'number' && rp > 0 && pts > 0 && Math.abs(rp - pts) > 0.001)
-      mWarn.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + '. If you score with the rubric, a perfect score shows as ' + rp + ' out of ' + pts + '.)'));
+      mK.rubric = mWarn.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + '. If you score with the rubric, a perfect score shows as ' + rp + ' out of ' + pts + '.)'));
     if (a.omit_from_final_grade && a.grading_type !== 'not_graded' && pts > 0)
-      mWarn.push(aEdit(a, '(worth ' + pts + ' points, but set not to count toward the final grade)'));
+      mK.omit = mWarn.push(aEdit(a, '(worth ' + pts + ' points, but set not to count toward the final grade)'));
   });
   var byName = {};
   pubAsg.forEach(function (a) { var kk = (a.name || '').trim().toLowerCase().replace(/\s+/g, ' '); if (kk) (byName[kk] = byName[kk] || []).push(a); });
-  Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1) mWarn.push(aLink(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)')); });
+  Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1) mK.dup = mWarn.push(aEdit(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)')); });
   var MW2 = 'Canvas is the single source of truth for grades, so the setup behind the number has to do the math you mean.';
-  if (mBad.length) add({ key: 'math', group: 'req', status: 'bad', name: 'The gradebook does the math you mean', why: MW2,
+  if (mBad.length) add({ key: 'math', kinds: mK, group: 'req', status: 'bad', name: 'The gradebook does the math you mean', why: MW2,
     result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong.',
     detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: GFIX, fixText: 'Set up your gradebook' });
-  else if (mWarn.length) add({ key: 'math', group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
+  else if (mWarn.length) add({ key: 'math', kinds: mK, group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
     result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn), fixHref: GFIX, fixText: 'Set up your gradebook' });
   else if (graded.length) add({ key: 'math', group: 'req', status: 'ok', name: 'The gradebook does the math you mean', why: MW2,
     result: weighted ? 'Weights add up to 100%.' : 'Nothing that skews a grade.' });
@@ -698,7 +698,7 @@ var CSS = [
 '#ID .howto{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}',
 '#ID .howto .ht{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:4px}',
 '#ID .howto ol{margin:0;padding-left:20px} #ID .howto li{margin:0 0 8px;color:var(--ink)}',
-'#ID .howto img{display:block;max-width:min(100%,360px);border:1px solid var(--line);border-radius:6px;margin-top:5px;background:#fff}',
+'#ID .howto img{display:block;max-width:100%;cursor:zoom-in;border:1px solid var(--line);border-radius:6px;margin-top:5px;background:#fff}',
 '#ID .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}',
 '#ID .go{display:inline-block;background:var(--char);color:#fff!important;text-decoration:none;border-radius:6px;padding:5px 12px;font-weight:700;font-size:13px}',
 '#ID .again{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}',
@@ -717,47 +717,59 @@ var BASELINE = PD + 'what-every-course-must-have-the-rj-baseline';
 var IMG = ((document.currentScript && document.currentScript.src) || 'https://rjedtech.github.io/Raider-Course-Check/check.js').replace(/check\.js.*$/, 'img/fix/');
 /* How to fix each check: where the big button goes, and the steps with a picture of
    that Canvas screen (taken in a demo course, the ordinary teacher's view). */
+var SAVE = ['Click <strong>Save</strong> at the bottom.', 'save-1.png'];
 var GUIDE = {
-  mod: { go: ['/modules', 'Open Modules'], steps: [
-    ['Click <strong>Fix it</strong> beside an item. Modules opens at the module for its due date.'],
+  mod: { go: ['/modules', 'Open Modules'], steps: function () { return [
+    ['Click <strong>Fix it</strong> beside an item. Modules opens at the suggested module.'],
     ['Click <strong>+</strong> at the right of that module’s name.', 'mod-1.png'],
-    ['Pick the type (Assignment, Quiz…), click the item, then <strong>Add Item</strong>.', 'mod-2.png']] },
-  due: { steps: [
+    ['Pick the type (Assignment, Quiz, Page…), click the item, then <strong>Add Item</strong>.', 'mod-2.png'],
+    ['A page from an old version of the course? Unpublish it instead.']]; } },
+  due: { steps: function () { return [
     ['Click <strong>Fix it</strong> beside an item. Its edit page opens.'],
-    ['Under <strong>Assign To</strong>, set the <strong>Due Date</strong> and <strong>Time</strong>. Paper work gets a date too.', 'due-1.png'],
-    ['Click <strong>Save</strong> at the bottom.', 'save-1.png']] },
-  dates: { steps: [
-    ['Click <strong>Fix it</strong> beside an item. Its edit page opens.'],
-    ['Set <strong>Available from</strong> before the due date and <strong>Until</strong> after it, or clear them. Change any date from last year.', 'dates-1.png'],
-    ['Click <strong>Save</strong>. Not published but meant for students? Publish it.', 'save-1.png']] },
-  missing: { go: ['/gradebook', 'Open the Gradebook'], steps: [
+    ['Under <strong>Assign To</strong>, set the <strong>Due Date</strong> and <strong>Time</strong>. Paper work gets a date too.', 'due-1.png'], SAVE]; } },
+  dates: { steps: function (k) { var st = [['Click <strong>Fix it</strong> beside an item. Its edit page opens.']];
+    if (k.window || k.outside) st.push(['Set <strong>Available from</strong> before the due date and <strong>Until</strong> after it, or clear them. Replace any date from last year.', 'dates-1.png']);
+    if (k.unpub) st.push(['Not published: if students should do it, click <strong>Publish</strong> at the top of its page. If not, leave it unpublished and clear its due date, or delete it.']);
+    if (k.midnight) st.push(['Due 12:00 AM: that’s the very start of the day. If you meant the night before, set the time to <strong>11:59 PM</strong>.', 'due-1.png']);
+    if (k.window || k.outside || k.midnight) st.push(SAVE);
+    return st; } },
+  missing: { go: ['/gradebook', 'Open the Gradebook'], steps: function () { return [
     ['Tell your classes first: from now on, missing work counts as a 0.'],
     ['In the Gradebook, click the <strong>gear</strong>.', 'gear-1.png'],
-    ['On <strong>Late Policies</strong>, check <strong>Automatically apply grade for missing submissions</strong>, leave the grade at <strong>0</strong>, and click <strong>Apply Settings</strong>.', 'missing-1.png']] },
-  grades: { go: ['/gradebook', 'Open the Gradebook'], steps: [
-    ['Hidden grades: in the Gradebook, click <strong>⋮</strong> on that column’s name, then <strong>Post grades</strong>, then <strong>Post</strong>.'],
-    ['Work waiting: click an item above to open SpeedGrader, or enter the scores you graded on paper.']] },
-  math: { go: ['/assignments', 'Open Assignments'], steps: [
-    ['Weights: on Assignments, click <strong>⋮</strong> at the top right, then <strong>Assignment Groups Weight</strong>.', 'weights-1.png'],
-    ['Make the percentages add up to <strong>100</strong>, then <strong>Save</strong>.'],
-    ['Anything else listed: click <strong>Fix it</strong> beside it.']] },
-  menu: { go: ['/settings#tab-navigation', 'Open Navigation settings'], steps: [
+    ['On <strong>Late Policies</strong>, check <strong>Automatically apply grade for missing submissions</strong>, leave it at <strong>0</strong>, and click <strong>Apply Settings</strong>.', 'missing-1.png']]; } },
+  grades: { go: ['/gradebook', 'Open the Gradebook'], steps: function (k) { var st = [];
+    if (k.hidden) st.push(['Hidden grades: in the Gradebook, click <strong>⋮</strong> on that column’s name, then <strong>Post grades</strong>, then <strong>Post</strong>.']);
+    if (k.waiting) st.push(['Work waiting: click an item above to open SpeedGrader and grade it, or enter the scores you graded on paper.']);
+    return st; } },
+  math: { steps: function (k) { var st = [];
+    if (k.weights || k.weightsOff) st.push(['Weights: on Assignments, click <strong>⋮</strong> at the top right, then <strong>Assignment Groups Weight</strong>.', 'weights-1.png'], ['Make the percentages add up to <strong>100</strong> (or turn weighting off if you don’t use it), then <strong>Save</strong>.']);
+    if (k.omit) st.push(['Set not to count: click <strong>Fix it</strong>, uncheck <strong>Do not count this assignment towards the final grade</strong>, then <strong>Save</strong>. Fine as is if it’s practice.']);
+    if (k.rubric) st.push(['Rubric total: click <strong>Fix it</strong> and make the rubric’s points match the assignment’s, or the other way round.']);
+    if (k.dup) st.push(['Same name twice: click <strong>Fix it</strong> and rename one, so students can tell them apart.']);
+    return st; },
+    go: function (k) { return (k.weights || k.weightsOff) ? ['/assignments', 'Open Assignments'] : null; } },
+  menu: { go: ['/settings#tab-navigation', 'Open Navigation settings'], steps: function () { return [
     ['Beside <strong>Assignments, Quizzes, Files, Pages, Discussions</strong> and <strong>People</strong>, click <strong>⋮</strong>, then <strong>Disable</strong>.', 'nav-1.png'],
-    ['Click <strong>Save</strong> at the bottom.']] },
-  empty: { go: ['/modules', 'Open Modules'], steps: [
-    ['Add what belongs there with <strong>+</strong> on the module’s name, or click its green check to unpublish it until it’s ready.', 'mod-1.png']] },
-  dated: { go: ['/modules', 'Open Modules'], steps: [
+    ['Click <strong>Save</strong> at the bottom.']]; } },
+  empty: { go: ['/modules', 'Open Modules'], steps: function () { return [
+    ['Add what belongs there with <strong>+</strong> on the module’s name, or click its green check to unpublish it until it’s ready.', 'mod-1.png']]; } },
+  dated: { go: ['/modules', 'Open Modules'], steps: function () { return [
     ['Put the date in each module’s name (“Week 10: Oct 20–23”) or in a text header for each class (“Tue 10/20 (R)”).'],
-    ['To add a header: <strong>+</strong> on the module, choose <strong>Text Header</strong>.', 'mod-1.png']] }
+    ['To add a header: <strong>+</strong> on the module, then choose <strong>Text Header</strong>.', 'mod-1.png']]; } }
 };
 function howTo(r, cid) {
   var g = GUIDE[r.key]; if (!g || r.status === 'ok' || r.self) return '';
-  var h = '<div class="howto"><div class="ht">How to fix it</div><ol>' + g.steps.map(function (st) {
-    return '<li>' + st[0] + (st[1] ? '<img src="' + IMG + st[1] + '" alt="">' : '') + '</li>';
+  var k = r.kinds || {}, steps = g.steps(k), go = typeof g.go === 'function' ? g.go(k) : g.go;
+  if (!steps.length) return '';
+  var list = '<ol>' + steps.map(function (st) {
+    return '<li>' + st[0] + (st[1] ? '<a href="' + IMG + st[1] + '" target="_blank" rel="noopener" title="Open full size"><img src="' + IMG + st[1] + '" alt=""></a>' : '') + '</li>';
   }).join('') + '</ol><div class="acts">' +
-    (g.go ? '<a class="go" href="' + esc(base + '/courses/' + cid + g.go[0]) + '" target="_blank" rel="noopener">' + esc(g.go[1]) + ' ↗</a>' : '') +
-    '<button class="again" type="button" data-again="' + esc(r.key) + '">↻ Check again</button></div></div>';
-  return h;
+    (go ? '<a class="go" href="' + esc(base + '/courses/' + cid + go[0]) + '" target="_blank" rel="noopener">' + esc(go[1]) + ' ↗</a>' : '') +
+    '<button class="again" type="button" data-again="' + esc(r.key) + '">↻ Check again</button></div>';
+  /* Steps show open on red rows; elsewhere they wait behind one click. */
+  return r.status === 'bad'
+    ? '<div class="howto"><div class="ht">How to fix it</div>' + list + '</div>'
+    : '<details class="howto more"><summary>How to fix it (' + plural(steps.length, 'step') + ')</summary>' + list + '</details>';
 }
 
 function nextStep(data) {
