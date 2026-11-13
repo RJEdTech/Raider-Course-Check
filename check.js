@@ -360,7 +360,7 @@ async function analyze(cid, now) {
     result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
     detail: '<div>Open each one, click <strong>Edit</strong>, and fix the dates under <em>Assign</em>:</div>' + ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
   else if (dWarn.length) add({ key: 'dates', group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
-    result: plural(dWarn.length, 'item') + ' worth a look.', detail: ul(dWarn) });
+    result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn) });
   else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
 
   /* Grades kept up to date, and posted where students can see them. */
@@ -445,7 +445,7 @@ async function analyze(cid, now) {
     result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong.',
     detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: GFIX, fixText: 'Set up your gradebook' });
   else if (mWarn.length) add({ key: 'math', group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
-    result: plural(mWarn.length, 'thing', 'things') + ' worth a look.', detail: ul(mWarn), fixHref: GFIX, fixText: 'Set up your gradebook' });
+    result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn), fixHref: GFIX, fixText: 'Set up your gradebook' });
   else if (graded.length) add({ key: 'math', group: 'req', status: 'ok', name: 'The gradebook does the math you mean', why: MW2,
     result: weighted ? 'Weights add up to 100%.' : 'Nothing that skews a grade.' });
 
@@ -629,10 +629,10 @@ var CSS = [
 '#ID .hd .x{right:12px} #ID .hd .p{right:56px}',
 '#ID .bd{padding:12px 16px 40px}',
 '#ID .cname{font-size:16px;font-weight:700;margin:0 0 8px}',
-'#ID .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 0 6px}',
-'#ID .tile{border:0;border-radius:9px;padding:8px 6px 7px;cursor:pointer;text-align:center;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:3px}',
-'#ID .tile .ti{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}',
-'#ID .tile .tl{font-size:12.5px;font-weight:600;line-height:1.2}',
+'#ID .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0 0 6px}',
+'#ID .tile{border:0;border-radius:8px;padding:6px 4px 6px;cursor:pointer;text-align:center;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;gap:3px}',
+'#ID .tile .ti{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}',
+'#ID .tile .tl{font-size:12px;font-weight:600;line-height:1.2}',
 '#ID .tile.ok{background:var(--okbg)} #ID .tile.warn{background:var(--warnbg)} #ID .tile.bad{background:var(--badbg)} #ID .tile.chk{background:var(--chkbg)}',
 '#ID .ok .ic,#ID .ok .ti{background:var(--ok)} #ID .warn .ic,#ID .warn .ti{background:var(--warn)} #ID .bad .ic,#ID .bad .ti{background:var(--bad)} #ID .chk .ic,#ID .chk .ti{background:var(--chk)}',
 '#ID .tile:hover{outline:2px solid var(--line)}',
@@ -663,7 +663,7 @@ var CSS = [
 '#ID .load{padding:30px 0;color:var(--ink2)}',
 '#ID .yes{flex:0 0 auto;background:var(--ok);color:#fff;border:0;border-radius:6px;padding:5px 11px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}',
 '#ID .undo{background:none;border:0;color:var(--chk);text-decoration:underline;cursor:pointer;font-size:12.5px;padding:0}',
-'#ID .strip{display:flex;flex-wrap:wrap;gap:3px;margin:2px 0 4px 43px}',
+'#ID .strip{display:flex;flex-wrap:wrap;gap:3px;margin:5px 0 1px}',
 '#ID .wk{width:38px;border:1px solid var(--line);border-radius:5px;text-align:center;padding:2px 0 1px;background:var(--bg)}',
 '#ID .wk b{display:block;font-size:13.5px;line-height:1.2} #ID .wk span{display:block;font-size:9.5px;color:var(--mute)}',
 '#ID .wk.ok b{color:var(--ok)} #ID .wk.gap{border-color:var(--warn);background:var(--warnbg)} #ID .wk.gap b{color:var(--warn)}',
@@ -745,8 +745,8 @@ function render(box, data, store) {
     if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
     var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
     var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
-    return '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' id="rjcc-' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span class="txt"><span class="nm">' + esc(r.name) + '</span><span class="tag">' + TAG[r.group] + '</span><div class="res">' + esc(res) + '</div></span>' + yes + '<span class="chev">▶</span></summary>' +
-      (r.weekly ? strip(r) : '') + (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
+    return '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' id="rjcc-' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span class="txt"><span class="nm">' + esc(r.name) + '</span><span class="tag">' + TAG[r.group] + '</span><div class="res">' + esc(res) + '</div>' + (r.weekly ? strip(r) : '') + '</span>' + yes + '<span class="chev">▶</span></summary>' +
+      (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
   }
   var bad = rs.filter(function (r) { return r.status === 'bad'; }),
     warn = rs.filter(function (r) { return r.status === 'warn'; }),
