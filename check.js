@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.1.0';
+var VERSION = '2.2.0';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -203,7 +203,7 @@ async function analyze(cid, now) {
   function add(o) { R.push(o); return o; }
   function aUrl(a) { return base + '/courses/' + cid + '/assignments/' + a.id; }
   function aLink(a, extra) { return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (extra ? ' <span class="mu">' + esc(extra) + '</span>' : ''); }
-  function aEdit(a, extra) { return '<a href="' + esc(aUrl(a) + '/edit') + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (extra ? ' <span class="mu">' + esc(extra) + '</span>' : ''); }
+  function aEdit(a, extra) { return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (extra ? ' <span class="mu">' + esc(extra) + '</span>' : '') + ' <a class="fixit" href="' + esc(aUrl(a) + '/edit') + '" target="_blank" rel="noopener">Fix it</a>'; }
   function pLink(p) { return '<a href="' + esc(base + '/courses/' + cid + '/pages/' + p.url) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a>'; }
   function ul(items, max) {
     max = max || 10;
@@ -252,6 +252,23 @@ async function analyze(cid, now) {
   var linkedPages = loosePages.filter(function (p) { return reach[p.url] != null; });
 
   var outA = pubAsg.filter(function (a) { return !asgInModule(a); });
+  var byAid = {}; assignments.forEach(function (a) { byAid[a.id] = a; if (a.quiz_id) byAid['q' + a.quiz_id] = a; if (a.discussion_topic) byAid['d' + a.discussion_topic.id] = a; });
+  function firstDue(a) { var d = datesOf(a).map(function (x) { return parse(x.due_at); }).filter(Boolean).sort(function (x, y) { return x - y; })[0]; return d || null; }
+  var modDates = pubMods.map(function (mo) {
+    var ds = (mo.items || []).map(function (it) { var a = it.type === 'Assignment' ? byAid[it.content_id] : it.type === 'Quiz' ? byAid['q' + it.content_id] : it.type === 'Discussion' ? byAid['d' + it.content_id] : null; return a && firstDue(a); }).filter(Boolean);
+    return { mo: mo, ds: ds };
+  }).filter(function (x) { return x.ds.length; });
+  function suggestModule(a) {
+    var d = firstDue(a); if (!d || !modDates.length) return null;
+    var best = null, bestGap = Infinity;
+    modDates.forEach(function (x) { x.ds.forEach(function (t) { var g = Math.abs(t - d); if (g < bestGap) { bestGap = g; best = x.mo; } }); });
+    return bestGap <= 7 * DAY ? best : null;
+  }
+  function modFix(a) {
+    var mo = suggestModule(a);
+    return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (mo ? ' <span class="mu">→ ' + esc(mo.name) + '</span>' : '') +
+      ' <a class="fixit" href="' + esc(MODS + (mo ? '#module_' + mo.id : '')) + '" target="_blank" rel="noopener">Fix it</a>';
+  }
   var mainOut = outA.filter(function (a) { return isGraded(a) && !offline(a); });
   var minorOut = outA.filter(function (a) { return !(isGraded(a) && !offline(a)); });
   function minorWhy(a) {
@@ -265,10 +282,10 @@ async function analyze(cid, now) {
   var minorCount = minorOut.length + outTopics.length + outQuizzes.length + orphanPages.length;
   var MW = 'Every assignment, quiz, discussion and page lives inside a published module, so students find everything in one place.';
   var r1detail = '', r1more = '';
-  if (mainOut.length) r1detail += '<div>In Modules, click <strong>+</strong> on the module and pick the item. A link on a page isn’t enough.</div>' + ul(mainOut.map(function (a) { return aLink(a); }));
+  if (mainOut.length) r1detail += '<div>Each one, with the module for its due date when there is one:</div>' + ul(mainOut.map(modFix));
   if (minorCount) {
     r1more += '<div>Ungraded work, paper work and pages. They still belong in the module for that day:</div>' +
-      ul(minorOut.map(function (a) { return aLink(a, minorWhy(a)); })
+      ul(minorOut.map(function (a) { return modFix(a) + ' <span class="mu">' + esc(minorWhy(a)) + '</span>'; })
         .concat(outTopics.map(function (t) { return '<a href="' + esc(t.html_url) + '" target="_blank" rel="noopener">' + esc(t.title) + '</a> <span class="mu">(discussion)</span>'; }))
         .concat(outQuizzes.map(function (q) { return '<a href="' + esc(q.html_url) + '" target="_blank" rel="noopener">' + esc(q.title) + '</a> <span class="mu">(' + (q.quiz_type === 'survey' ? 'survey' : 'practice quiz') + ')</span>'; }))
         .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span>'; })), 12) +
@@ -672,6 +689,15 @@ var CSS = [
 '#ID .gap-row{border-top:1px solid var(--line);padding:6px 0}',
 '#ID .gap-row label{display:flex;gap:7px;align-items:center;margin-top:3px;color:var(--ink)}',
 '#ID .donel{margin:0;padding:0;list-style:none} #ID .donel li{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13.5px} #ID .donel .ic{flex-basis:18px;height:18px;font-size:11px}',
+'#ID .fixit{display:inline-block;margin-left:6px;background:var(--red);color:#fff!important;text-decoration:none;border-radius:999px;padding:0 9px;font-size:12px;font-weight:700;line-height:20px;vertical-align:1px}',
+'#ID .howto{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}',
+'#ID .howto .ht{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:4px}',
+'#ID .howto ol{margin:0;padding-left:20px} #ID .howto li{margin:0 0 8px;color:var(--ink)}',
+'#ID .howto img{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin-top:5px;background:#fff}',
+'#ID .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}',
+'#ID .go{display:inline-block;background:var(--char);color:#fff!important;text-decoration:none;border-radius:6px;padding:5px 12px;font-weight:700;font-size:13px}',
+'#ID .again{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}',
+'#ID .hd .a{right:118px}',
 '#ID .next{border-left:5px solid var(--ok);background:var(--panel);border-radius:0 9px 9px 0;padding:9px 12px;margin:14px 0 4px;font-size:13.5px}',
 '@media print{body>*:not(#ID){display:none!important}#ID{position:static;width:auto;box-shadow:none;overflow:visible}#ID .hd{position:static}#ID .hd button,#ID .yes,#ID .undo{display:none}#ID details{break-inside:avoid}}'
 ].join('\n').replace(/#ID/g, '#' + ID);
@@ -683,6 +709,51 @@ var TILE = { mod: 'Modules', missing: 'Zero for missing', due: 'Due dates', date
   ai: 'AI policy', acc: 'Accommodations', weekly: 'Graded weekly', own: 'You grade it', menu: 'Short menu', dated: 'Dated classes', empty: 'No empty modules' };
 var TAG = { req: 'Required', exp: 'Expected', route: 'Recommended' };
 var BASELINE = PD + 'what-every-course-must-have-the-rj-baseline';
+var IMG = ((document.currentScript && document.currentScript.src) || 'https://rjedtech.github.io/Raider-Course-Check/check.js').replace(/check\.js.*$/, 'img/fix/');
+/* How to fix each check: where the big button goes, and the steps with a picture of
+   that Canvas screen (taken in a demo course, the ordinary teacher's view). */
+var GUIDE = {
+  mod: { go: ['/modules', 'Open Modules'], steps: [
+    ['Click <strong>Fix it</strong> beside an item. Modules opens at the module for its due date.'],
+    ['Click <strong>+</strong> at the right of that module’s name.', 'mod-1.png'],
+    ['Pick the type (Assignment, Quiz…), click the item, then <strong>Add Item</strong>.', 'mod-2.png']] },
+  due: { steps: [
+    ['Click <strong>Fix it</strong> beside an item. Its edit page opens.'],
+    ['Under <strong>Assign To</strong>, set the <strong>Due Date</strong> and <strong>Time</strong>. Paper work gets a date too.', 'due-1.png'],
+    ['Click <strong>Save</strong> at the bottom.', 'save-1.png']] },
+  dates: { steps: [
+    ['Click <strong>Fix it</strong> beside an item. Its edit page opens.'],
+    ['Set <strong>Available from</strong> before the due date and <strong>Until</strong> after it, or clear them. Change any date from last year.', 'dates-1.png'],
+    ['Click <strong>Save</strong>. Not published but meant for students? Publish it.', 'save-1.png']] },
+  missing: { go: ['/gradebook', 'Open the Gradebook'], steps: [
+    ['Tell your classes first: from now on, missing work counts as a 0.'],
+    ['In the Gradebook, click the <strong>gear</strong>.', 'gear-1.png'],
+    ['On <strong>Late Policies</strong>, check <strong>Automatically apply grade for missing submissions</strong>, leave the grade at <strong>0</strong>, and click <strong>Apply Settings</strong>.', 'missing-1.png']] },
+  grades: { go: ['/gradebook', 'Open the Gradebook'], steps: [
+    ['Hidden grades: in the Gradebook, click <strong>⋮</strong> on that column’s name, then <strong>Post grades</strong>, then <strong>Post</strong>.'],
+    ['Work waiting: click an item above to open SpeedGrader, or enter the scores you graded on paper.']] },
+  math: { go: ['/assignments', 'Open Assignments'], steps: [
+    ['Weights: on Assignments, click <strong>⋮</strong> at the top right, then <strong>Assignment Groups Weight</strong>.', 'weights-1.png'],
+    ['Make the percentages add up to <strong>100</strong>, then <strong>Save</strong>.'],
+    ['Anything else listed: click <strong>Fix it</strong> beside it.']] },
+  menu: { go: ['/settings#tab-navigation', 'Open Navigation settings'], steps: [
+    ['Beside <strong>Assignments, Quizzes, Files, Pages, Discussions</strong> and <strong>People</strong>, click <strong>⋮</strong>, then <strong>Disable</strong>.', 'nav-1.png'],
+    ['Click <strong>Save</strong> at the bottom.']] },
+  empty: { go: ['/modules', 'Open Modules'], steps: [
+    ['Add what belongs there with <strong>+</strong> on the module’s name, or click its green check to unpublish it until it’s ready.', 'mod-1.png']] },
+  dated: { go: ['/modules', 'Open Modules'], steps: [
+    ['Put the date in each module’s name (“Week 10: Oct 20–23”) or in a text header for each class (“Tue 10/20 (R)”).'],
+    ['To add a header: <strong>+</strong> on the module, choose <strong>Text Header</strong>.', 'mod-1.png']] }
+};
+function howTo(r, cid) {
+  var g = GUIDE[r.key]; if (!g || r.status === 'ok' || r.self) return '';
+  var h = '<div class="howto"><div class="ht">How to fix it</div><ol>' + g.steps.map(function (st) {
+    return '<li>' + st[0] + (st[1] ? '<img loading="lazy" src="' + IMG + st[1] + '" alt="">' : '') + '</li>';
+  }).join('') + '</ol><div class="acts">' +
+    (g.go ? '<a class="go" href="' + esc(base + '/courses/' + cid + g.go[0]) + '" target="_blank" rel="noopener">' + esc(g.go[1]) + ' ↗</a>' : '') +
+    '<button class="again" type="button" data-again="' + esc(r.key) + '">↻ Check again</button></div></div>';
+  return h;
+}
 
 function nextStep(data) {
   var L = data.ladder;
@@ -742,6 +813,7 @@ function render(box, data, store) {
       if (r.more) detail += '<details class="more"><summary>' + esc(r.moreLabel || 'Show more') + '</summary>' + r.more + '</details>';
     }
     if (r.self && r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
+    detail += howTo(r, data.cid);
     if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
     var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
     var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
@@ -765,6 +837,7 @@ function render(box, data, store) {
   body.querySelectorAll('[data-unself]').forEach(function (b) { b.onclick = function () { delete store.self[b.dataset.unself]; rerender(); }; });
   body.querySelectorAll('input[data-wk]').forEach(function (cb) { cb.onchange = function () { if (cb.checked) store.wk[cb.dataset.wk] = 1; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
   body.querySelectorAll('[data-unwk]').forEach(function (b) { b.onclick = function () { delete store.wk[b.dataset.unwk]; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
+  body.querySelectorAll('[data-again]').forEach(function (b) { b.onclick = function () { if (box.__rerun) box.__rerun(b.dataset.again); }; });
   body.querySelectorAll('[data-go]').forEach(function (t) { t.onclick = function () {
     var el = box.querySelector('#rjcc-' + t.dataset.go); if (!el) return;
     var done = box.querySelector('#rjcc-done'); if (done && done.contains(el)) done.open = true;
@@ -782,13 +855,29 @@ function open() {
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', 'Raider Course Check');
   box.innerHTML = '<div class="hd"><div class="t">Raider Course Check</div><div class="s">Read only. Nothing in your course is changed.</div>' +
-    '<button class="p" type="button">Print</button><button class="x" type="button" aria-label="Close">✕</button></div><div class="bd"><div class="load">Checking your class… (a few seconds)</div></div>';
+    '<button class="a" type="button" title="Check this class again">↻</button><button class="p" type="button">Print</button><button class="x" type="button" aria-label="Close">✕</button></div><div class="bd"><div class="load">Checking your class… (a few seconds)</div></div>';
   document.body.appendChild(box);
   box.querySelector('.x').onclick = function () { box.remove(); css.remove(); };
   box.querySelector('.p').onclick = function () { box.querySelectorAll('details').forEach(function (d) { d.open = true; }); window.print(); };
   var m = /(^|\.)instructure\.com$/.test(location.hostname) && location.pathname.match(/\/courses\/(\d+)/);
   var body = box.querySelector('.bd');
   if (!m) { body.innerHTML = '<p class="load">Open one of your classes in Canvas first (any page in the class), then click <strong>Raider Course Check</strong> again.</p>'; return; }
+  /* Check again: run every check fresh, then reopen the row the teacher was on. */
+  box.__rerun = function (key) {
+    var keep = [].map.call(box.querySelectorAll('details.row[open]'), function (d) { return d.id; });
+    if (key) keep.push('rjcc-' + key);
+    var top = box.scrollTop;
+    var bt = key && box.querySelector('[data-again="' + key + '"]'); if (bt) { bt.disabled = true; bt.textContent = 'Checking…'; }
+    if (!key) body.innerHTML = '<div class="load">Checking your class again…</div>';
+    analyze(m[1]).then(function (data) {
+      render(box, data, loadStore(m[1]));
+      keep.forEach(function (id) { var d = box.querySelector('#' + id); if (d) d.open = true; });
+      var el = key && box.querySelector('#rjcc-' + key);
+      if (el && el.closest('#rjcc-done')) { box.querySelector('#rjcc-done').open = true; }
+      box.scrollTop = el ? el.offsetTop - 70 : top;
+    }).catch(function () { body.innerHTML = '<p class="load">Couldn’t check again. Close the panel and click the button again.</p>'; });
+  };
+  box.querySelector('.a').onclick = function () { box.__rerun(null); };
   analyze(m[1]).then(function (data) { render(box, data, loadStore(m[1])); }).catch(function (e) {
     var why = e && (e.status === 401 || e.status === 403 || e.status === 404) ? 'You need to be a teacher in this course to check it.' : 'Something went wrong (' + esc(e && e.message) + ').';
     body.innerHTML = '<p class="load">Couldn’t check this course. ' + why + ' Still stuck? <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a></p>';
