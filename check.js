@@ -753,7 +753,7 @@ var GUIDE = {
 function howTo(r, cid) {
   var g = GUIDE[r.key]; if (!g || r.status === 'ok' || r.self) return '';
   var h = '<div class="howto"><div class="ht">How to fix it</div><ol>' + g.steps.map(function (st) {
-    return '<li>' + st[0] + (st[1] ? '<img loading="lazy" src="' + IMG + st[1] + '" alt="">' : '') + '</li>';
+    return '<li>' + st[0] + (st[1] ? '<img src="' + IMG + st[1] + '" alt="">' : '') + '</li>';
   }).join('') + '</ol><div class="acts">' +
     (g.go ? '<a class="go" href="' + esc(base + '/courses/' + cid + g.go[0]) + '" target="_blank" rel="noopener">' + esc(g.go[1]) + ' ↗</a>' : '') +
     '<button class="again" type="button" data-again="' + esc(r.key) + '">↻ Check again</button></div></div>';
@@ -819,7 +819,9 @@ function render(box, data, store) {
     }
     if (r.self && r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
     detail += howTo(r, data.cid);
-    if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
+    /* The how-to page link stays; a plain "open this Canvas page" link is dropped when the steps already have that button. */
+    var dup = GUIDE[r.key] && GUIDE[r.key].go && r.fixHref && r.fixHref.indexOf(base) === 0;
+    if (r.fixHref && !dup && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
     var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
     var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
     return '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' id="rjcc-' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span class="txt"><span class="nm">' + esc(r.name) + '</span><span class="tag">' + TAG[r.group] + '</span><div class="res">' + esc(res) + '</div>' + (r.weekly ? strip(r) : '') + '</span>' + yes + '<span class="chev">▶</span></summary>' +
