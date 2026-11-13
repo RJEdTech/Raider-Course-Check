@@ -238,7 +238,7 @@ async function analyze(cid, now) {
   var r1detail = '';
   if (mainOut.length) r1detail += '<div>Add these to a module: in Modules, click <strong>+</strong> on the module and pick the item. A link on a page isn’t enough; the item itself goes in the module.</div>' + ul(mainOut.map(function (a) { return aLink(a); }));
   if (minorCount) {
-    r1detail += '<div>' + (mainOut.length ? 'Also not in a module. Students don’t turn these in on Canvas, so they matter less, but they still belong in the module for that day:' : 'Students don’t turn these in on Canvas, but they still belong in the module for that day, so an absent student can find them:') + '</div>' +
+    r1detail += '<div>' + (mainOut.length ? 'Also not in a module: smaller items (ungraded work, paper work and pages). They matter less, but they still belong in the module for that day:' : 'These smaller items (ungraded work, paper work and pages) still belong in the module for that day, so an absent student can find them:') + '</div>' +
       ul(minorOut.map(function (a) { return aLink(a, minorWhy(a)); })
         .concat(outTopics.map(function (t) { return '<a href="' + esc(t.html_url) + '" target="_blank" rel="noopener">' + esc(t.title) + '</a> <span class="mu">(discussion)</span>'; }))
         .concat(outQuizzes.map(function (q) { return '<a href="' + esc(q.html_url) + '" target="_blank" rel="noopener">' + esc(q.title) + '</a> <span class="mu">(' + (q.quiz_type === 'survey' ? 'survey' : 'practice quiz') + ')</span>'; }))
@@ -572,7 +572,7 @@ function evaluate(data, store) {
         wk.state = 'gap'; counted++; gaps.push(wk);
       });
       r.gaps = gaps;
-      var exNote = excused ? ' (' + plural(excused, 'week') + ' you marked as having a reason not counted.)' : '';
+      var exNote = excused ? ' Not counting ' + plural(excused, 'week') + ' you marked as having a reason.' : '';
       if (!counted) { r.status = 'chk'; r.result = 'No full week of classes has finished yet.' + exNote; }
       else if (!gaps.length) { r.status = 'ok'; r.result = 'Something graded was due every week: ' + plural(hit, 'week') + ' so far.' + exNote; }
       else {
