@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.2.4';
+var VERSION = '2.2.5';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -148,7 +148,7 @@ var ATTENDANCE = /^\s*roll call attendance\s*$/i;
 var CLASS_SIZE = 0;
 function scopeOf(d) {
   if (d.base) return 'all';
-  var t = (d.title || '').trim(), mm = t.match(/^(\d+) students?$/i);
+  var t = (d.title || '').trim(), mm = t.match(/^(\d+) (students?|estudiantes?|étudiants?|élèves?|studenten|schüler)$/i);
   if (mm && CLASS_SIZE && +mm[1] >= CLASS_SIZE / 2) return 'all';
   if (d.set_type === 'ADHOC' || d.set_type === 'Group' || mm) return 'some';
   return 'section';
@@ -223,6 +223,18 @@ async function analyze(cid, now) {
   function aUrl(a) { return base + '/courses/' + cid + '/assignments/' + a.id; }
   function aLink(a, extra) { return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (extra ? ' <span class="mu">' + esc(extra) + '</span>' : ''); }
   function aEdit(a, extra) { return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (extra ? ' <span class="mu">' + esc(extra) + '</span>' : '') + ' <a class="fixit" href="' + esc(aUrl(a) + '/edit') + '" target="_blank" rel="noopener">Fix it</a>'; }
+  /* "I meant this": a worth-a-look item the teacher ticked stops showing (this computer only). Red items have no tick. */
+  var MEANT = loadStore(cid).meant || {}, meantN = {};
+  function meant(k, a) { if (MEANT[k + ':' + a.id]) { meantN[k] = (meantN[k] || 0) + 1; return true; } return false; }
+  function mBtn(k, a) { return ' <button class="meant" type="button" data-meant="' + k + ':' + a.id + '" data-row="' + k + '">I meant this</button>'; }
+  function meantNote(k) { return meantN[k] ? '<div class="mu">Not showing ' + plural(meantN[k], 'item') + ' you marked “I meant this.” <button class="undo" type="button" data-unmeant="' + k + '">Show again</button></div>' : ''; }
+  /* Assigned only to a few students (a make-up, a one-off): who sees it, else ''. */
+  function fewOnly(a) {
+    if (!a.only_visible_to_overrides) return '';
+    var ds = datesOf(a);
+    if (!ds.length || ds.some(function (d) { return d.base || scopeOf(d) !== 'some'; })) return '';
+    return ds.map(function (d) { return d.title || 'a few students'; }).join(', ');
+  }
   function pLink(p) { return '<a href="' + esc(base + '/courses/' + cid + '/pages/' + p.url) + '" target="_blank" rel="noopener">' + esc(p.title) + '</a>'; }
   function ul(items, max) {
     max = max || 10;
@@ -269,7 +281,7 @@ async function analyze(cid, now) {
     linksIn(p.body).forEach(function (v) { if (byUrl[v] && reach[v] == null) { reach[v] = reach[u] + 1; queue.push(v); } });
   }
   var loosePages = pages.filter(function (p) { return !inMod['P' + p.url] && p.url !== frontUrl; });
-  var orphanPages = loosePages.filter(function (p) { return reach[p.url] == null; });
+  var orphanPages = loosePages.filter(function (p) { return reach[p.url] == null && !meant('mod', { id: 'p' + p.page_id }); });
   var linkedPages = loosePages.filter(function (p) { return reach[p.url] != null; });
 
   var outA = pubAsg.filter(function (a) { return !asgInModule(a); });
@@ -295,9 +307,10 @@ async function analyze(cid, now) {
     return '<a href="' + esc(aUrl(a)) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>' + (mo ? ' <span class="mu">→ try ' + esc(mo.name) + '</span>' : '') +
       ' <a class="fixit" href="' + esc(MODS + (mo ? '#module_' + mo.id : '')) + '" target="_blank" rel="noopener">Fix it</a>';
   }
-  var mainOut = outA.filter(function (a) { return isGraded(a) && !offline(a); });
-  var minorOut = outA.filter(function (a) { return !(isGraded(a) && !offline(a)); });
+  var mainOut = outA.filter(function (a) { return isGraded(a) && !offline(a) && !fewOnly(a); });
+  var minorOut = outA.filter(function (a) { return !(isGraded(a) && !offline(a) && !fewOnly(a)) && !meant('mod', a); });
   function minorWhy(a) {
+    var few = fewOnly(a); if (few) return '(only for ' + few + '; put it in the module, and only they see it)';
     if (!isGraded(a)) return (a.points_possible || 0) > 0 ? '(not graded)' : '(0 points)';
     var t = a.submission_types || [];
     if (t.indexOf('on_paper') >= 0) return '(on paper)';
@@ -313,10 +326,10 @@ async function analyze(cid, now) {
   if (mainOut.length) r1detail += '<div>Each one, with a suggested module (same unit or same week) when there is one:</div>' + ul(mainOut.map(modFix));
   if (minorCount) {
     r1more += '<div>Ungraded work, paper work and pages. They still belong in the module for that day:</div>' +
-      ul(minorOut.map(function (a) { return modFix(a) + ' <span class="mu">' + esc(minorWhy(a)) + '</span>'; })
+      ul(minorOut.map(function (a) { return modFix(a) + ' <span class="mu">' + esc(minorWhy(a)) + '</span>' + mBtn('mod', a); })
         .concat(outTopics.map(function (t) { return '<a href="' + esc(t.html_url) + '" target="_blank" rel="noopener">' + esc(t.title) + '</a> <span class="mu">(discussion)</span>'; }))
         .concat(outQuizzes.map(function (q) { return '<a href="' + esc(q.html_url) + '" target="_blank" rel="noopener">' + esc(q.title) + '</a> <span class="mu">(' + (q.quiz_type === 'survey' ? 'survey' : 'practice quiz') + ')</span>'; }))
-        .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span> <a class="fixit" href="' + esc(MODS) + '" target="_blank" rel="noopener">Fix it</a>'; })), 12) +
+        .concat(orphanPages.map(function (p) { return pLink(p) + ' <span class="mu">(page; nothing links to it)</span> <a class="fixit" href="' + esc(MODS) + '" target="_blank" rel="noopener">Fix it</a>' + mBtn('mod', { id: 'p' + p.page_id }); })), 12) +
       (orphanPages.length ? '<div class="mu">A page from an old version of the course? Unpublish it instead.</div>' : '');
   }
   if (linkedPages.length) r1more += '<div class="mu">' + plural(linkedPages.length, 'page') + ' outside modules ' + (linkedPages.length === 1 ? 'is' : 'are') + ' linked from your home page, syllabus or a module page, so students can reach ' + (linkedPages.length === 1 ? 'it' : 'them') + '. That’s fine.</div>';
@@ -324,10 +337,10 @@ async function analyze(cid, now) {
   if (!anything) add({ key: 'mod', group: 'req', status: 'chk', name: 'Modules hold everything, in order', why: MW, result: 'Nothing is published yet.', fixHref: PD + 'module-setup', fixText: 'Module setup' });
   else if (mainOut.length) add({ key: 'mod', group: 'req', status: 'bad', name: 'Modules hold everything, in order', why: MW,
     result: plural(mainOut.length, 'graded item isn’t', 'graded items aren’t') + ' in a module.',
-    detail: r1detail + modHelp, more: r1more, moreLabel: minorCount ? 'Show ' + plural(minorCount, 'smaller item') : (linkedPages.length ? 'Pages outside modules' : ''), fixHref: MODS, fixText: 'Open my Modules' });
+    detail: r1detail + modHelp, more: r1more + meantNote('mod'), moreLabel: minorCount ? 'Show ' + plural(minorCount, 'smaller item') : (linkedPages.length ? 'Pages outside modules' : ''), fixHref: MODS, fixText: 'Open my Modules' });
   else if (minorCount) add({ key: 'mod', group: 'req', status: 'warn', name: 'Modules hold everything, in order', why: MW,
     result: plural(minorCount, 'smaller item isn’t', 'smaller items aren’t') + ' in a module.',
-    detail: r1more + modHelp, fixHref: MODS, fixText: 'Open my Modules' });
+    detail: r1more + modHelp + meantNote('mod'), fixHref: MODS, fixText: 'Open my Modules' });
   else add({ key: 'mod', group: 'req', status: 'ok', name: 'Modules hold everything, in order', why: MW, result: 'Everything students need is in a published module.', detail: r1detail });
 
   /* ============ REQUIRED 2: missing policy (automatic zero) ============ */
@@ -373,14 +386,15 @@ async function analyze(cid, now) {
 
   /* Dates that keep work off the list or make it late before students can turn it in. */
   var dBad = [], dWarn = [], dK = {};
-  var soon = now.getTime() + 3 * DAY, recent = now.getTime() - 14 * DAY, horizon = now.getTime() + 21 * DAY;
+  var soon = now.getTime() + 3 * DAY, horizon = now.getTime() + 21 * DAY;
   assignments.forEach(function (a) {
     if (ATTENDANCE.test(a.name || '')) return;
     var ds = datesOf(a);
     if (!a.published) {
-      if (!isGraded(a)) return;
-      var close = ds.map(function (d) { return parse(d.due_at); }).filter(function (d) { return d && d.getTime() <= soon && d.getTime() >= recent; }).sort(function (x, y) { return x - y; })[0];
-      if (close) dK.unpub = dWarn.push(aEdit(a, close < now ? '(not published, and it was due ' + fmtDayTime(close) + ')' : '(not published, and it’s due ' + fmtDayTime(close) + ')'));
+      /* Only work coming due: forgot to publish. Unpublished work whose date has passed is almost always a choice (dropped, saved for next year). */
+      if (!isGraded(a) || meant('dates', a)) return;
+      var close = ds.map(function (d) { return parse(d.due_at); }).filter(function (d) { return d && d.getTime() <= soon && d.getTime() >= now.getTime(); }).sort(function (x, y) { return x - y; })[0];
+      if (close) dK.unpub = dWarn.push(aEdit(a, '(not published, and it’s due ' + fmtDayTime(close) + ')') + mBtn('dates', a));
       return;
     }
     for (var i = 0; i < ds.length; i++) {
@@ -397,16 +411,16 @@ async function analyze(cid, now) {
     if (isGraded(a)) {
       var mid = ds.filter(function (d) { return scopeOf(d) !== 'some'; }).map(function (d) { return parse(d.due_at); })
         .filter(function (d) { return d && d > now && d.getTime() <= horizon && isMidnight(d); })[0];
-      if (mid) { var nb = addDays(mid, -1); dK.midnight = dWarn.push(aEdit(a, '(due 12:00 AM ' + fmtDay(mid) + ', the very start of ' + mid.toLocaleDateString('en-US', { weekday: 'long' }) + '. If you meant ' + nb.toLocaleDateString('en-US', { weekday: 'long' }) + ' night, 11:59 PM is clearer.)')); }
+      if (mid && !meant('dates', a)) { var nb = addDays(mid, -1); dK.midnight = dWarn.push(aEdit(a, '(due 12:00 AM ' + fmtDay(mid) + ', the very start of ' + mid.toLocaleDateString('en-US', { weekday: 'long' }) + '. If you meant ' + nb.toLocaleDateString('en-US', { weekday: 'long' }) + ' night, 11:59 PM is clearer.)') + mBtn('dates', a)); }
     }
   });
   var DUFIX = PD + 'fix-a-due-date-students-cant-use';
   var UW = 'A date that locks early, opens late or sits outside the semester makes work late before students can turn it in, or keeps it off their list.';
   if (dBad.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
     result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
-    detail: ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '', fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
+    detail: ul(dBad), more: dWarn.length ? ul(dWarn) + meantNote('dates') : meantNote('dates'), moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '', fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
   else if (dWarn.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
-    result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn), fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
+    result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn) + meantNote('dates'), fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
   else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
 
   /* Grades kept up to date, and posted where students can see them. */
@@ -470,6 +484,8 @@ async function analyze(cid, now) {
       if ((g.group_weight || 0) !== 0) return;
       var n = graded.filter(function (a) { return String(a.assignment_group_id) === String(g.id); }).length;
       if (!n) return;
+      /* A group kept for work that's set aside (Archive, Not In Use) is 0% on purpose. */
+      if (/archiv|not in use|unused|set aside|don.?t count|not counted/i.test(g.name || '')) return;
       /* Canvas makes "Imported Assignments" on a copy and "Assignments" by default; at 0% they're never on purpose.
          Any other 0% group (a practice category, say) may be on purpose, so it's only worth a look. */
       var made = /^\s*(imported assignments|assignments)\s*$/i.test(g.name || '');
@@ -489,21 +505,22 @@ async function analyze(cid, now) {
   pubAsg.forEach(function (a) {
     var rp = a.rubric_settings && a.rubric_settings.points_possible, pts = a.points_possible || 0;
     /* Many teachers type the score and never fill in the rubric, so a mismatch is only worth a look. */
+    if (meant('math', a)) return;
     if (a.use_rubric_for_grading && typeof rp === 'number' && rp > 0 && pts > 0 && Math.abs(rp - pts) > 0.001)
-      mK.rubric = mWarn.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + '. If you score with the rubric, a perfect score shows as ' + rp + ' out of ' + pts + '.)'));
+      mK.rubric = mWarn.push(aEdit(a, '(the rubric adds up to ' + rp + ' points but the assignment is worth ' + pts + '. If you score with the rubric, a perfect score shows as ' + rp + ' out of ' + pts + '.)') + mBtn('math', a));
     if (a.omit_from_final_grade && a.grading_type !== 'not_graded' && pts > 0)
-      mK.omit = mWarn.push(aEdit(a, '(worth ' + pts + ' points, but set not to count toward the final grade)'));
+      mK.omit = mWarn.push(aEdit(a, '(worth ' + pts + ' points, but set not to count toward the final grade)') + mBtn('math', a));
   });
   var byName = {};
   pubAsg.forEach(function (a) { var kk = (a.name || '').trim().toLowerCase().replace(/\s+/g, ' '); if (kk) (byName[kk] = byName[kk] || []).push(a); });
-  Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1) mK.dup = mWarn.push(aEdit(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)')); });
+  Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1 && !meant('math', byName[kk][0])) mK.dup = mWarn.push(aEdit(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)') + mBtn('math', byName[kk][0])); });
   var MFIX = PD + 'a-grade-total-looks-wrong-what-to-check#cause1';
   var MW2 = 'Canvas is the single source of truth for grades, so the setup behind the number has to do the math you mean.';
   if (mBad.length) add({ key: 'math', kinds: mK, group: 'req', status: 'bad', name: 'The gradebook does the math you mean', why: MW2,
     result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong.',
-    detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: MFIX, fixText: 'Weights and gradebook math' });
+    detail: ul(mBad), more: mWarn.length ? ul(mWarn) + meantNote('math') : meantNote('math'), moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: MFIX, fixText: 'Weights and gradebook math' });
   else if (mWarn.length) add({ key: 'math', kinds: mK, group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
-    result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn), fixHref: MFIX, fixText: 'Weights and gradebook math' });
+    result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn) + meantNote('math'), fixHref: MFIX, fixText: 'Weights and gradebook math' });
   else if (graded.length) add({ key: 'math', group: 'req', status: 'ok', name: 'The gradebook does the math you mean', why: MW2,
     result: weighted ? 'Weights add up to 100%.' : 'Nothing that skews a grade.' });
 
@@ -589,7 +606,12 @@ async function analyze(cid, now) {
 
   var MON = '(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|ene|abr|ago|dic|janv|févr|avr|mai|juin|juil|août|déc)';
   var dateRe = new RegExp('\\b' + MON + '[a-zéû]*\\.?\\s*\\d|\\b\\d{1,2}\\s+(de\\s+)?' + MON + '|\\b\\d{1,2}\\/\\d{1,2}\\b|\\b(mon|tue|tues|wed|thu|thur|thurs|fri|monday|tuesday|wednesday|thursday|friday|lunes|martes|miércoles|jueves|viernes|lundi|mardi|mercredi|jeudi|vendredi)\\b', 'i');
-  var workMods = pubMods.filter(function (mo) { return (mo.items || []).some(function (it) { return it.published !== false && (it.type === 'Assignment' || it.type === 'Quiz' || it.type === 'Discussion'); }); });
+  /* Class or week modules: 2+ pieces of work. A welcome, course-info or resources module isn't a class, so it needs no date. */
+  var INFOMOD = /welcome|start here|getting started|begin here|course (info|information|overview)|overview|syllabus|resources?|orientation|about (this|the) (course|class)|policies|tools?\b/i;
+  var workMods = pubMods.filter(function (mo) {
+    if (INFOMOD.test(mo.name || '')) return false;
+    return (mo.items || []).filter(function (it) { return it.published !== false && (it.type === 'Assignment' || it.type === 'Quiz' || it.type === 'Discussion'); }).length >= 2;
+  });
   if (workMods.length) {
     var undated = workMods.filter(function (mo) {
       if (dateRe.test(mo.name)) return false;
@@ -598,8 +620,9 @@ async function analyze(cid, now) {
     var DTW = 'An absent student opens Modules, finds the date they missed, and sees the notes, the work and when it’s due.';
     if (!undated.length) add({ key: 'dated', group: 'route', status: 'ok', name: 'Each class or week has its date on it', why: DTW, result: 'Every module shows its dates.' });
     else add({ key: 'dated', group: 'route', status: 'chk', name: 'Each class or week has its date on it', why: DTW,
+      self: true, showResult: true, yes: 'They’re dated',
       result: undated.length + ' of ' + workMods.length + ' modules show no date.',
-      detail: '<div>Put the date where students look: in the module name (“Week 10: Oct 20–23”), or a text header or page for each class (“Tue 10/20 (R) · Wed 10/21 (W)”). The checker can miss a date written another way, so look before you change anything.</div>' + ul(undated.map(function (mo) { return esc(mo.name); })),
+      detail: '<div>Put the date where students look: in the module name (“Week 10: Oct 20–23”), or a text header or page for each class (“Tue 10/20 (R) · Wed 10/21 (W)”). The checker can miss a date written another way, so look before you change anything.</div>' + ul(undated.map(function (mo) { return esc(mo.name); })) + '<div class="mu">Not a class or week (a unit overview, an ongoing project)? Then it needs no date. Click <strong>They’re dated</strong>.</div>',
       fixHref: ROUTE, fixText: 'Pick your modules pattern' });
   }
 
@@ -631,7 +654,7 @@ async function analyze(cid, now) {
 
 /* ---------------- statuses that depend on the teacher's own ticks ---------------- */
 function storeKey(cid) { return 'rjCourseCheck:v2:' + cid; }
-function loadStore(cid) { try { var s = JSON.parse(localStorage.getItem(storeKey(cid)) || '{}'); s.self = s.self || {}; s.wk = s.wk || {}; return s; } catch (e) { return { self: {}, wk: {} }; } }
+function loadStore(cid) { try { var s = JSON.parse(localStorage.getItem(storeKey(cid)) || '{}'); s.self = s.self || {}; s.wk = s.wk || {}; s.meant = s.meant || {}; return s; } catch (e) { return { self: {}, wk: {}, meant: {} }; } }
 function saveStore(cid, s) { try { localStorage.setItem(storeKey(cid), JSON.stringify(s)); } catch (e) {} }
 
 /* Fill in status/result for self-checks and the weekly row. */
@@ -721,6 +744,7 @@ var CSS = [
 '#ID .teams{display:inline-block;background:#5B5FC7;color:#fff!important;text-decoration:none;border-radius:5px;padding:4px 11px;font-weight:700}',
 '#ID .load{padding:30px 0;color:var(--ink2)}',
 '#ID .yes{flex:0 0 auto;background:var(--ok);color:var(--bg);border:0;border-radius:6px;padding:5px 11px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}',
+'#ID .meant{background:none;border:1px solid var(--line);color:var(--mute);border-radius:10px;padding:0 7px;font-size:11.5px;cursor:pointer;margin-left:4px;white-space:nowrap}',
 '#ID .undo{background:none;border:0;color:var(--chk);text-decoration:underline;cursor:pointer;font-size:12.5px;padding:0}',
 '#ID .strip{display:flex;flex-wrap:wrap;gap:3px;margin:5px 0 1px}',
 '#ID .wk{width:38px;border:1px solid var(--line);border-radius:5px;text-align:center;padding:2px 0 1px;background:var(--bg)}',
@@ -741,7 +765,7 @@ var CSS = [
 '#ID .again{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}',
 '#ID .hd .a{right:118px}',
 '#ID .next{border-left:5px solid var(--ok);background:var(--panel);border-radius:0 9px 9px 0;padding:9px 12px;margin:14px 0 4px;font-size:13.5px}',
-'@media print{body>*:not(#ID){display:none!important}#ID{position:static;width:auto;box-shadow:none;overflow:visible}#ID .hd{position:static}#ID .hd button,#ID .yes,#ID .undo{display:none}#ID details{break-inside:avoid}}'
+'@media print{body>*:not(#ID){display:none!important}#ID{position:static;width:auto;box-shadow:none;overflow:visible}#ID .hd{position:static}#ID .hd button,#ID .yes,#ID .undo,#ID .meant{display:none}#ID details{break-inside:avoid}}'
 ].join('\n').replace(/#ID/g, '#' + ID);
 
 var ICON = { ok: '✓', warn: '!', bad: '✕', chk: '?' };
@@ -796,7 +820,7 @@ var GUIDE = {
     ['To add a header: <strong>+</strong> on the module, then choose <strong>Text Header</strong>.', 'mod-1.png']]; } }
 };
 function howTo(r, cid) {
-  var g = GUIDE[r.key]; if (!g || r.status === 'ok' || r.self) return '';
+  var g = GUIDE[r.key]; if (!g || r.status === 'ok' || (r.self && r.done)) return '';
   var k = r.kinds || {}, steps = g.steps(k), go = typeof g.go === 'function' ? g.go(k) : g.go;
   if (!steps.length) return '';
   var list = '<ol>' + steps.map(function (st) {
@@ -872,7 +896,7 @@ function render(box, data, store) {
     /* The how-to page link stays; a plain "open this Canvas page" link is dropped when the steps already have that button. */
     var dup = GUIDE[r.key] && GUIDE[r.key].go && r.fixHref && r.fixHref.indexOf(base) === 0 && r.fixHref.indexOf(PD) !== 0;
     if (r.fixHref && !dup && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
-    var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
+    var res = r.self ? (r.done ? 'You confirmed this.' : (r.showResult ? r.result : 'Only you can confirm this.')) : r.result;
     var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
     return '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' id="rjcc-' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span class="txt"><span class="nm">' + esc(r.name) + '</span><span class="tag">' + TAG[r.group] + '</span><div class="res">' + esc(res) + '</div>' + (r.weekly ? strip(r) : '') + '</span>' + yes + '<span class="chev">▶</span></summary>' +
       (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
@@ -894,6 +918,8 @@ function render(box, data, store) {
   body.querySelectorAll('[data-unself]').forEach(function (b) { b.onclick = function () { delete store.self[b.dataset.unself]; rerender(); }; });
   body.querySelectorAll('input[data-wk]').forEach(function (cb) { cb.onchange = function () { if (cb.checked) store.wk[cb.dataset.wk] = 1; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
   body.querySelectorAll('[data-unwk]').forEach(function (b) { b.onclick = function () { delete store.wk[b.dataset.unwk]; rerender(); var el = box.querySelector('#rjcc-weekly'); if (el) { el.open = true; } }; });
+  body.querySelectorAll('[data-meant]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); store.meant = store.meant || {}; store.meant[b.dataset.meant] = new Date().toISOString(); saveStore(data.cid, store); if (box.__rerun) box.__rerun(b.dataset.row); }; });
+  body.querySelectorAll('[data-unmeant]').forEach(function (b) { b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); var k = b.dataset.unmeant; Object.keys(store.meant || {}).forEach(function (x) { if (x.indexOf(k + ':') === 0) delete store.meant[x]; }); saveStore(data.cid, store); if (box.__rerun) box.__rerun(k); }; });
   body.querySelectorAll('[data-again]').forEach(function (b) { b.onclick = function () { if (box.__rerun) box.__rerun(b.dataset.again); }; });
   body.querySelectorAll('[data-go]').forEach(function (t) { t.onclick = function () {
     var el = box.querySelector('#rjcc-' + t.dataset.go); if (!el) return;

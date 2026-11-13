@@ -30,7 +30,7 @@ Only classes are checked: courses in a "1st/2nd Semester" term. IMPACT, clubs, a
 
 - `index.html`: the setup page. The bookmark button is a short loader that pulls `check.js` from this site (cache-busted hourly), so a change here reaches every teacher without re-dragging the button.
 - `check.js`: the checker. Runs inside Canvas as the signed-in teacher and reads the Canvas REST API with their session. **Read only:** GET requests only.
-- Nothing is sent anywhere. The only things saved are the teacher's own ticks ("I have this", weeks marked as having a reason), in the browser's localStorage, per class (`rjCourseCheck:v2:<course id>`).
+- Nothing is sent anywhere. The only things saved are the teacher's own ticks ("I have this", weeks marked as having a reason, worth-a-look items marked "I meant this"), in the browser's localStorage, per class (`rjCourseCheck:v2:<course id>`).
 - Light/dark follows the operating system.
 
 ## Each semester
