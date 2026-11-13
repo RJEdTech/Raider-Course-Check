@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.2.1';
+var VERSION = '2.2.2';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -444,7 +444,13 @@ async function analyze(cid, now) {
     groups.forEach(function (g) {
       if ((g.group_weight || 0) !== 0) return;
       var n = graded.filter(function (a) { return String(a.assignment_group_id) === String(g.id); }).length;
-      if (n) mK.weights = mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count)</span>');
+      if (!n) return;
+      /* Canvas makes "Imported Assignments" on a copy and "Assignments" by default; at 0% they're never on purpose.
+         Any other 0% group (a practice category, say) may be on purpose, so it's only worth a look. */
+      var made = /^\s*(imported assignments|assignments)\s*$/i.test(g.name || '');
+      var line = '<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count toward the final grade' +
+        (made ? '. Canvas made this group' + (/imported/i.test(g.name) ? ' when the course was copied' : '') + ', so this is almost never on purpose.)' : '. Fine if it’s practice; if they should count, move them or give the group a weight.)') + '</span>';
+      if (made) mK.zeroGroup = mBad.push(line); else mK.zeroGroup = mWarn.push(line);
     });
   }
   if (!weighted && groups.length > 1 && graded.length) {
@@ -742,12 +748,13 @@ var GUIDE = {
     if (k.waiting) st.push(['Work waiting: click an item above to open SpeedGrader and grade it, or enter the scores you graded on paper.']);
     return st; } },
   math: { steps: function (k) { var st = [];
+    if (k.zeroGroup) st.push(['A 0% group: on <strong>Assignments</strong>, drag each item (by its <strong>⋮⋮</strong> handle) into the group it belongs in. Or click <strong>⋮</strong> beside the group, then <strong>Edit</strong>, and give it a weight.'], ['Check that the weights still add up to <strong>100</strong>.']);
     if (k.weights || k.weightsOff) st.push(['Weights: on Assignments, click <strong>⋮</strong> at the top right, then <strong>Assignment Groups Weight</strong>.', 'weights-1.png'], ['Make the percentages add up to <strong>100</strong> (or turn weighting off if you don’t use it), then <strong>Save</strong>.']);
     if (k.omit) st.push(['Set not to count: click <strong>Fix it</strong>, uncheck <strong>Do not count this assignment towards the final grade</strong>, then <strong>Save</strong>. Fine as is if it’s practice.']);
     if (k.rubric) st.push(['Rubric total: click <strong>Fix it</strong> and make the rubric’s points match the assignment’s, or the other way round.']);
     if (k.dup) st.push(['Same name twice: click <strong>Fix it</strong> and rename one, so students can tell them apart.']);
     return st; },
-    go: function (k) { return (k.weights || k.weightsOff) ? ['/assignments', 'Open Assignments'] : null; } },
+    go: function (k) { return (k.weights || k.weightsOff || k.zeroGroup) ? ['/assignments', 'Open Assignments'] : null; } },
   menu: { go: ['/settings#tab-navigation', 'Open Navigation settings'], steps: function () { return [
     ['Beside <strong>Assignments, Quizzes, Files, Pages, Discussions</strong> and <strong>People</strong>, click <strong>⋮</strong>, then <strong>Disable</strong>.', 'nav-1.png'],
     ['Click <strong>Save</strong> at the bottom.']]; } },
