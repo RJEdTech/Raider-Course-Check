@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.2.3';
+var VERSION = '2.2.4';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -231,6 +231,8 @@ async function analyze(cid, now) {
     return h;
   }
   var MODS = base + '/courses/' + cid + '/modules';
+  function pdLink(href, text) { return '<div><a class="fix" href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(text) + ' →</a></div>'; }
+  var ADDITEM = pdLink(PD + 'module-setup#add-item', 'How to add an item to a module');
 
 
   var pubAsg = assignments.filter(function (a) { return a.published && !ATTENDANCE.test(a.name || ''); });
@@ -305,6 +307,8 @@ async function analyze(cid, now) {
   var outQuizzes = quizzes.filter(function (q) { return q.published && (q.quiz_type === 'practice_quiz' || q.quiz_type === 'survey') && !inMod['Q' + q.id]; });
   var minorCount = minorOut.length + outTopics.length + outQuizzes.length + orphanPages.length;
   var MW = 'Every assignment, quiz, discussion and page lives inside a published module, so students find everything in one place.';
+  /* 40+ items outside modules is a pattern problem, not a few strays. */
+  var modHelp = mainOut.length + minorCount >= 40 ? pdLink(PD + 'one-route-for-students-pick-your-modules-pattern', 'Pick a modules pattern for spring') : ADDITEM;
   var r1detail = '', r1more = '';
   if (mainOut.length) r1detail += '<div>Each one, with a suggested module (same unit or same week) when there is one:</div>' + ul(mainOut.map(modFix));
   if (minorCount) {
@@ -320,10 +324,10 @@ async function analyze(cid, now) {
   if (!anything) add({ key: 'mod', group: 'req', status: 'chk', name: 'Modules hold everything, in order', why: MW, result: 'Nothing is published yet.', fixHref: PD + 'module-setup', fixText: 'Module setup' });
   else if (mainOut.length) add({ key: 'mod', group: 'req', status: 'bad', name: 'Modules hold everything, in order', why: MW,
     result: plural(mainOut.length, 'graded item isn’t', 'graded items aren’t') + ' in a module.',
-    detail: r1detail, more: r1more, moreLabel: minorCount ? 'Show ' + plural(minorCount, 'smaller item') : (linkedPages.length ? 'Pages outside modules' : ''), fixHref: MODS, fixText: 'Open my Modules' });
+    detail: r1detail + modHelp, more: r1more, moreLabel: minorCount ? 'Show ' + plural(minorCount, 'smaller item') : (linkedPages.length ? 'Pages outside modules' : ''), fixHref: MODS, fixText: 'Open my Modules' });
   else if (minorCount) add({ key: 'mod', group: 'req', status: 'warn', name: 'Modules hold everything, in order', why: MW,
     result: plural(minorCount, 'smaller item isn’t', 'smaller items aren’t') + ' in a module.',
-    detail: r1more, fixHref: MODS, fixText: 'Open my Modules' });
+    detail: r1more + modHelp, fixHref: MODS, fixText: 'Open my Modules' });
   else add({ key: 'mod', group: 'req', status: 'ok', name: 'Modules hold everything, in order', why: MW, result: 'Everything students need is in a published module.', detail: r1detail });
 
   /* ============ REQUIRED 2: missing policy (automatic zero) ============ */
@@ -396,12 +400,13 @@ async function analyze(cid, now) {
       if (mid) { var nb = addDays(mid, -1); dK.midnight = dWarn.push(aEdit(a, '(due 12:00 AM ' + fmtDay(mid) + ', the very start of ' + mid.toLocaleDateString('en-US', { weekday: 'long' }) + '. If you meant ' + nb.toLocaleDateString('en-US', { weekday: 'long' }) + ' night, 11:59 PM is clearer.)')); }
     }
   });
+  var DUFIX = PD + 'fix-a-due-date-students-cant-use';
   var UW = 'A date that locks early, opens late or sits outside the semester makes work late before students can turn it in, or keeps it off their list.';
   if (dBad.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
     result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
-    detail: ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
+    detail: ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '', fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
   else if (dWarn.length) add({ key: 'dates', kinds: dK, group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
-    result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn) });
+    result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn), fixHref: DUFIX, fixText: 'Fix a due date students can’t use' });
   else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
 
   /* Grades kept up to date, and posted where students can see them. */
@@ -446,7 +451,8 @@ async function analyze(cid, now) {
     if (wList.length) gr.push(plural(wList.length, 'item has', 'items have') + ' work waiting more than two weeks for a grade');
     if (!gr.length) add({ key: 'grades', group: 'req', status: 'ok', name: 'Grades kept up to date, and posted', why: GW, result: 'Nothing waiting, nothing hidden.' });
     else add({ key: 'grades', kinds: { hidden: hList.length, waiting: wList.length }, group: 'req', status: oldHidden ? 'bad' : 'warn', name: 'Grades kept up to date, and posted', why: GW,
-      result: gr.join('; ') + '.', detail: gd, fixHref: GFIX, fixText: 'Set up your gradebook' });
+      result: gr.join('; ') + '.', detail: gd,
+      fixHref: hList.length ? PD + 'a-grade-total-looks-wrong-what-to-check#cause5' : GFIX, fixText: hList.length ? 'Post grades students can’t see' : 'Set up your gradebook' });
   } catch (e) {
     add({ key: 'grades', group: 'req', status: 'chk', name: 'Grades kept up to date, and posted', why: GW, result: 'Couldn’t read submissions. Check your Gradebook yourself.', fixHref: GFIX, fixText: 'Set up your gradebook' });
   }
@@ -491,12 +497,13 @@ async function analyze(cid, now) {
   var byName = {};
   pubAsg.forEach(function (a) { var kk = (a.name || '').trim().toLowerCase().replace(/\s+/g, ' '); if (kk) (byName[kk] = byName[kk] || []).push(a); });
   Object.keys(byName).forEach(function (kk) { if (byName[kk].length > 1) mK.dup = mWarn.push(aEdit(byName[kk][0], '(' + byName[kk].length + ' published assignments have this name; students can turn work in to the wrong one)')); });
+  var MFIX = PD + 'a-grade-total-looks-wrong-what-to-check#cause1';
   var MW2 = 'Canvas is the single source of truth for grades, so the setup behind the number has to do the math you mean.';
   if (mBad.length) add({ key: 'math', kinds: mK, group: 'req', status: 'bad', name: 'The gradebook does the math you mean', why: MW2,
     result: plural(mBad.length, 'setting makes', 'settings make') + ' grades come out wrong.',
-    detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: GFIX, fixText: 'Set up your gradebook' });
+    detail: ul(mBad), more: mWarn.length ? ul(mWarn) : '', moreLabel: mWarn.length ? 'Show ' + plural(mWarn.length, 'more to look at', 'more to look at') : '', fixHref: MFIX, fixText: 'Weights and gradebook math' });
   else if (mWarn.length) add({ key: 'math', kinds: mK, group: 'req', status: 'warn', name: 'The gradebook does the math you mean', why: MW2,
-    result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn), fixHref: GFIX, fixText: 'Set up your gradebook' });
+    result: plural(mWarn.length, 'setting') + ' to look at.', detail: ul(mWarn), fixHref: MFIX, fixText: 'Weights and gradebook math' });
   else if (graded.length) add({ key: 'math', group: 'req', status: 'ok', name: 'The gradebook does the math you mean', why: MW2,
     result: weighted ? 'Weights add up to 100%.' : 'Nothing that skews a grade.' });
 
@@ -599,7 +606,7 @@ async function analyze(cid, now) {
   var emptyMods = pubMods.filter(function (mo) { return !(mo.items || []).some(function (it) { return it.published !== false && it.type !== 'SubHeader'; }); });
   if (emptyMods.length) add({ key: 'empty', group: 'route', status: 'warn', name: 'No empty modules', why: 'An empty module looks like missing work to a student.',
     result: plural(emptyMods.length, 'module is', 'modules are') + ' empty.',
-    detail: ul(emptyMods.map(function (mo) { return esc(mo.name); })) + '<div>Fill it, or unpublish it until it’s ready.</div>', fixHref: MODS, fixText: 'Open my Modules' });
+    detail: ul(emptyMods.map(function (mo) { return esc(mo.name); })) + '<div>Fill it, or unpublish it until it’s ready.</div>' + ADDITEM, fixHref: MODS, fixText: 'Open my Modules' });
   else if (pubMods.length) add({ key: 'empty', group: 'route', status: 'ok', name: 'No empty modules', why: 'An empty module looks like missing work to a student.', result: 'None empty.' });
 
   /* ============ NEXT STEP on the PD ladder ============ */
@@ -676,6 +683,7 @@ var CSS = [
 '#ID .hd{background:var(--char);color:#fff;padding:12px 16px;border-bottom:5px solid var(--red);position:sticky;top:0;z-index:2}',
 '#ID .hd .t{font-size:17px;font-weight:700}',
 '#ID .hd .s{font-size:12px;color:#cfcfcf;margin-top:1px}',
+'#ID .hd .s a.how{color:#cfcfcf;text-decoration:underline}',
 '#ID .hd button{position:absolute;top:10px;background:none;border:1px solid #777;color:#fff;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:14px}',
 '#ID .hd .x{right:12px} #ID .hd .p{right:56px}',
 '#ID .bd{padding:12px 16px 40px}',
@@ -862,7 +870,7 @@ function render(box, data, store) {
     if (r.self && r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
     detail += howTo(r, data.cid);
     /* The how-to page link stays; a plain "open this Canvas page" link is dropped when the steps already have that button. */
-    var dup = GUIDE[r.key] && GUIDE[r.key].go && r.fixHref && r.fixHref.indexOf(base) === 0;
+    var dup = GUIDE[r.key] && GUIDE[r.key].go && r.fixHref && r.fixHref.indexOf(base) === 0 && r.fixHref.indexOf(PD) !== 0;
     if (r.fixHref && !dup && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
     var res = r.self ? (r.done ? 'You confirmed this.' : 'Only you can confirm this.') : r.result;
     var yes = r.self && !r.done ? '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>' : '';
@@ -903,7 +911,7 @@ function open() {
   box.id = ID;
   box.setAttribute('role', 'dialog');
   box.setAttribute('aria-label', 'Raider Course Check');
-  box.innerHTML = '<div class="hd"><div class="t">Raider Course Check</div><div class="s">Read only. Nothing in your course is changed.</div>' +
+  box.innerHTML = '<div class="hd"><div class="t">Raider Course Check</div><div class="s">Read only. Nothing in your course is changed. · <a class="how" href="' + PD + 'raider-course-check-see-what-your-class-needs-in-one-click" target="_blank" rel="noopener">How to use this</a></div>' +
     '<button class="a" type="button" title="Check this class again">↻</button><button class="p" type="button">Print</button><button class="x" type="button" aria-label="Close">✕</button></div><div class="bd"><div class="load">Checking your class… (a few seconds)</div></div>';
   document.body.appendChild(box);
   box.querySelector('.x').onclick = function () { box.remove(); css.remove(); };
