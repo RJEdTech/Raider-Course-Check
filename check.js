@@ -15,7 +15,7 @@
 */
 (function () {
 'use strict';
-var VERSION = '2.2.2';
+var VERSION = '2.2.3';
 var ID = 'rjCourseCheck';
 var AUDIT = !!window.RJCC_AUDIT;
 
@@ -45,10 +45,29 @@ var CAL = {
     firstNote: 'Classes began Wed Aug 19, so that first partial week isn’t counted.',
     last: '2026-12-14',
     weeks: {
+      '2026-09-07': { short: 'Labor Day' },
+      '2026-09-28': { short: 'No classes Fri (9th grade retreat)' },
       '2026-10-12': { short: 'Fall break' },
+      '2026-10-19': { short: 'In-service Mon' },
       '2026-11-23': { off: 'Thanksgiving break' },
+      '2026-12-14': { short: 'Semester exams' },
       '2026-12-21': { off: 'Christmas break' },
       '2026-12-28': { off: 'Christmas break' }
+    }
+  },
+  '2026/2027 2nd': {
+    first: '2027-01-04',
+    last: '2027-05-24',
+    weeks: {
+      '2027-01-04': { short: 'Classes start Tue Jan 5' },
+      '2027-01-18': { short: 'MLK Day' },
+      '2027-02-15': { short: 'Presidents’ Day' },
+      '2027-03-15': { short: 'Diversity Day' },
+      '2027-03-22': { off: 'Spring break' },
+      '2027-03-29': { short: 'Easter Monday' },
+      '2027-04-12': { short: 'SAT / PSAT day' },
+      '2027-05-10': { short: 'Cannonball Day' },
+      '2027-05-24': { short: 'Semester exams' }
     }
   }
 };
