@@ -711,11 +711,11 @@ function render(box, data, store) {
     rs.forEach(function (r) {
       var detail = r.weekly ? weeklyDetail(r) : (r.detail || '');
       if (r.self) {
-        if (r.done) detail = '<div>You checked this on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
+        if (r.done) detail = '<div>Marked done on ' + esc(fmtDay(new Date(r.done))) + '. <button class="undo" type="button" data-unself="' + esc(r.key) + '">Undo</button></div>';
         else detail += '<button class="yes" type="button" data-self="' + esc(r.key) + '">✓ ' + esc(r.yes) + '</button>';
       }
       if (r.fixHref && !(r.self && r.done)) detail += '<div><a class="fix" href="' + esc(r.fixHref) + '" target="_blank" rel="noopener">' + esc(r.fixText) + ' →</a></div>';
-      var result = r.self && r.done ? 'You checked this.' : r.result;
+      var result = r.self && r.done ? 'You confirmed this one yourself.' : r.result;
       var open = r.status === 'bad' || (r.weekly && r.status === 'warn') || (r.self && !r.done);
       h += '<details class="row ' + r.status + '"' + (open ? ' open' : '') + ' data-key="' + esc(r.key) + '"><summary><span class="ic" aria-label="' + LABEL[r.status] + '">' + ICON[r.status] + '</span><span><span class="nm">' + esc(r.name) + '</span><div class="res">' + esc(result) + '</div><div class="why">' + esc(r.why) + '</div></span></summary>' +
         (detail ? '<div class="det">' + detail + '</div>' : '') + '</details>';
