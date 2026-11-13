@@ -337,7 +337,7 @@ async function analyze(cid, now) {
   if (!graded.length) add({ key: 'due', group: 'req', status: 'chk', name: 'Every graded item has a due date', why: DW, result: 'No published graded work yet.' });
   else if (noDueAll.length) add({ key: 'due', group: 'req', status: 'bad', name: 'Every graded item has a due date', why: DW,
     result: plural(noDueAll.length, 'graded item') + (noDueAll.length === 1 ? ' has' : ' have') + ' no due date' + (noDueSome.length ? ', and ' + noDueSome.length + ' more ' + (noDueSome.length === 1 ? 'is' : 'are') + ' missing one for a few students.' : '.'),
-    detail: '<div>Open each one, click <strong>Edit</strong>, and add a due date. Work done on paper still gets one.</div>' + ul(noDueAll.concat(noDueSome)), fixHref: DFIX, fixText: 'Every kind of work, on the student’s list' });
+    detail: ul(noDueAll.concat(noDueSome)), fixHref: DFIX, fixText: 'Every kind of work, on the student’s list' });
   else if (noDueSome.length) add({ key: 'due', group: 'req', status: 'warn', name: 'Every graded item has a due date', why: DW,
     result: 'Every item has a due date for the class, but ' + plural(noDueSome.length, 'item has', 'items have') + ' a date for a few students with no due date.',
     detail: '<div>Usually an extension where the due date was left blank. Those students won’t see it on their list.</div>' + ul(noDueSome), fixHref: DFIX, fixText: 'Every kind of work, on the student’s list' });
@@ -375,7 +375,7 @@ async function analyze(cid, now) {
   var UW = 'A date that locks early, opens late or sits outside the semester makes work late before students can turn it in, or keeps it off their list.';
   if (dBad.length) add({ key: 'dates', group: 'req', status: 'bad', name: 'Due dates students can use', why: UW,
     result: plural(dBad.length, 'item has a date', 'items have dates') + ' that can’t work.',
-    detail: '<div>Open each one, click <strong>Edit</strong>, and fix the dates under <em>Assign</em>:</div>' + ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
+    detail: ul(dBad), more: dWarn.length ? ul(dWarn) : '', moreLabel: dWarn.length ? 'Show ' + plural(dWarn.length, 'more to look at', 'more to look at') : '' });
   else if (dWarn.length) add({ key: 'dates', group: 'req', status: 'warn', name: 'Due dates students can use', why: UW,
     result: plural(dWarn.length, 'date') + ' to look at.', detail: ul(dWarn) });
   else if (graded.length) add({ key: 'dates', group: 'req', status: 'ok', name: 'Due dates students can use', why: UW, result: 'Every date works.' });
@@ -693,7 +693,7 @@ var CSS = [
 '#ID .howto{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}',
 '#ID .howto .ht{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:4px}',
 '#ID .howto ol{margin:0;padding-left:20px} #ID .howto li{margin:0 0 8px;color:var(--ink)}',
-'#ID .howto img{display:block;max-width:100%;border:1px solid var(--line);border-radius:6px;margin-top:5px;background:#fff}',
+'#ID .howto img{display:block;max-width:min(100%,360px);border:1px solid var(--line);border-radius:6px;margin-top:5px;background:#fff}',
 '#ID .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}',
 '#ID .go{display:inline-block;background:var(--char);color:#fff!important;text-decoration:none;border-radius:6px;padding:5px 12px;font-weight:700;font-size:13px}',
 '#ID .again{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer}',
