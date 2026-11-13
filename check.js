@@ -70,9 +70,32 @@ async function fetchJson(url) {
   try { j = JSON.parse(text.replace(/^while\(1\);/, '')); } catch (e) {}
   return { status: r.status, ok: r.ok, json: j, link: r.headers.get('Link') || '' };
 }
-/* GET with paging. Throws on failure (e.status set). */
+/* GET with paging. Throws on failure (e.status set). When Canvas says how
+   many pages there are, the rest are fetched four at a time, not one by one. */
 async function get(url) {
-  var out = [], next = base + url, guard = 0;
+  var first = await fetchJson(base + url);
+  if (!first.ok) { var e0 = new Error('HTTP ' + first.status); e0.status = first.status; throw e0; }
+  if (!Array.isArray(first.json)) return first.json;
+  var nx = first.link.match(/<([^>]+)>;\s*rel="next"/), last = first.link.match(/<([^>]+)>;\s*rel="last"/);
+  var lp = last && last[1].match(/[?&]page=(\d+)/);
+  if (!nx) return first.json;
+  if (lp && +lp[1] > 1 && +lp[1] <= 80) {
+    var n = +lp[1], urls = [];
+    for (var pg = 2; pg <= n; pg++) urls.push(last[1].replace(/([?&]page=)\d+/, '$1' + pg));
+    var pagesOut = new Array(urls.length), idx = 0;
+    await Promise.all([0, 1, 2, 3].map(async function () {
+      while (idx < urls.length) {
+        var my = idx++, r = await fetchJson(urls[my]);
+        if (!r.ok) { var e1 = new Error('HTTP ' + r.status); e1.status = r.status; throw e1; }
+        pagesOut[my] = r.json || [];
+      }
+    }));
+    return pagesOut.reduce(function (a, b) { return a.concat(b); }, first.json);
+  }
+  return first.json.concat(await getFrom(nx[1]));
+}
+async function getFrom(abs) {
+  var out = [], next = abs, guard = 0;
   while (next && guard++ < 80) {
     var r = await fetchJson(next);
     if (!r.ok) { var e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }
@@ -152,6 +175,12 @@ async function analyze(cid, now) {
   if (notClass) return { version: VERSION, cid: cid, course: { id: course.id, name: course.name, term: termName }, notClass: notClass, results: [], skipped: true, checkedAt: now.toISOString() };
   CLASS_SIZE = course.total_students || 0;
 
+  /* Submissions waiting to be graded: started now, read later. */
+  var waitingP = Promise.all([
+    get(C + '/students/submissions?student_ids[]=all&workflow_state=submitted&per_page=100'),
+    get(C + '/students/submissions?student_ids[]=all&workflow_state=pending_review&per_page=100')
+  ]);
+  waitingP.catch(function () {});
   var all = await Promise.all([
     get(C + '/assignments?per_page=100&include[]=all_dates'),
     get(C + '/modules?per_page=100&include[]=items'),
@@ -339,10 +368,7 @@ async function analyze(cid, now) {
   var GFIX = PD + 'set-up-your-gradebook';
   var gmap = {}; assignments.forEach(function (a) { gmap[a.id] = a; });
   try {
-    var waiting = await Promise.all([
-      get(C + '/students/submissions?student_ids[]=all&workflow_state=submitted&per_page=100'),
-      get(C + '/students/submissions?student_ids[]=all&workflow_state=pending_review&per_page=100')
-    ]);
+    var waiting = await waitingP;
     var wcut = now.getTime() - 14 * DAY, wl = {}, seen = {};
     waiting[0].concat(waiting[1]).forEach(function (s) {
       var a = gmap[s.assignment_id];
