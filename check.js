@@ -363,7 +363,8 @@ async function analyze(cid, now) {
         var h = hidden[s.assignment_id] || (hidden[s.assignment_id] = { n: 0, oldest: at });
         h.n++; if (at < h.oldest) h.oldest = at;
       });
-      Object.keys(hidden).forEach(function (id) { if (hidden[id].oldest.getTime() < hcut14) oldHidden++; });
+      /* Red only when several grades on one item have been hidden over two weeks; one or two is worth a look. */
+      Object.keys(hidden).forEach(function (id) { if (hidden[id].oldest.getTime() < hcut14 && hidden[id].n >= 3) oldHidden++; });
     }
     var wList = Object.keys(wl).map(function (id) { return { a: gmap[id], n: wl[id] }; }).sort(function (x, y) { return y.n - x.n; });
     var hList = Object.keys(hidden).map(function (id) { return { a: gmap[id], h: hidden[id] }; }).sort(function (x, y) { return x.h.oldest - y.h.oldest; });
@@ -389,11 +390,12 @@ async function analyze(cid, now) {
   var AIX = base + '/courses/' + cid + '/assignments';
   if (weighted && groups.length) {
     var tot = groups.reduce(function (s, g) { return s + (g.group_weight || 0); }, 0);
-    if (Math.abs(tot - 100) > 0.05) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(add up to ' + Math.round(tot * 100) / 100 + '%, not 100%' + (tot < 100 ? '; Canvas scales them up, so each group counts for more than it says)' : '; grades can come out higher than they should)') + '</span>');
+    if (tot === 0) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(“Weight final grade based on assignment groups” is on, but every group is set to 0%. Set the weights, or turn weighting off.)</span>');
+    else if (Math.abs(tot - 100) > 0.05) mBad.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">Assignment group weights</a> <span class="mu">(add up to ' + Math.round(tot * 100) / 100 + '%, not 100%' + (tot < 100 ? '; Canvas scales them up, so each group counts for more than it says)' : '; grades can come out higher than they should)') + '</span>');
     groups.forEach(function (g) {
       if ((g.group_weight || 0) !== 0) return;
       var n = graded.filter(function (a) { return String(a.assignment_group_id) === String(g.id); }).length;
-      if (n) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + ' don’t count)</span>');
+      if (n) mWarn.push('<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count)</span>');
     });
   }
   if (!weighted && groups.length > 1) {
@@ -474,6 +476,7 @@ async function analyze(cid, now) {
       }
     }
   }
+  if (weeks && noDueAll.length) weeks.undated = noDueAll.length;
   add({ key: 'weekly', group: 'exp', weekly: true, name: 'One graded item a week', why: 'Every week, at least one grade goes into the gradebook, and it’s something you actually assess, not a completion check.', weeks: weeks,
     fixHref: PD + 'should-this-be-graded', fixText: 'Should this be graded?' });
 
@@ -670,6 +673,7 @@ function weeklyDetail(r) {
   }).join('') + '</div>';
   h += '<div class="key">Each box is a week (Monday’s date) with the number of graded items due. Grey: a break' + (W.list.some(function (w) { return w.state === 'short'; }) ? ', or a short week with nothing graded' : '') + (W.list.some(function (w) { return w.state === 'exc'; }) ? ', or a week you marked' : '') + '. Dashed: this week, still in progress.</div>';
   if (W.note) h += '<div class="mu">' + esc(W.note) + '</div>';
+  if (W.undated) h += '<div class="mu">' + plural(W.undated, 'graded item has', 'graded items have') + ' no due date, so ' + (W.undated === 1 ? 'it can’t' : 'they can’t') + ' be counted in any week. Give ' + (W.undated === 1 ? 'it' : 'them') + ' a due date (see “Every graded item has a due date”) and ' + (W.undated === 1 ? 'it' : 'they') + ' will show up here.</div>';
   if (r.gaps && r.gaps.length) {
     h += r.gaps.map(function (g) {
       return '<div class="gap-row"><strong>Week of ' + esc(g.range) + '</strong>: ' +
@@ -740,7 +744,7 @@ function open() {
   document.body.appendChild(box);
   box.querySelector('.x').onclick = function () { box.remove(); css.remove(); };
   box.querySelector('.p').onclick = function () { box.querySelectorAll('details').forEach(function (d) { d.open = true; }); window.print(); };
-  var m = location.pathname.match(/\/courses\/(\d+)/);
+  var m = /(^|\.)instructure\.com$/.test(location.hostname) && location.pathname.match(/\/courses\/(\d+)/);
   var body = box.querySelector('.bd');
   if (!m) { body.innerHTML = '<p class="load">Open one of your classes in Canvas first (any page in the class), then click <strong>Raider Course Check</strong> again.</p>'; return; }
   analyze(m[1]).then(function (data) { render(box, data, loadStore(m[1])); }).catch(function (e) {
