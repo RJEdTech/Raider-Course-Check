@@ -448,9 +448,13 @@ async function analyze(cid, now) {
       /* Canvas makes "Imported Assignments" on a copy and "Assignments" by default; at 0% they're never on purpose.
          Any other 0% group (a practice category, say) may be on purpose, so it's only worth a look. */
       var made = /^\s*(imported assignments|assignments)\s*$/i.test(g.name || '');
+      /* A group named for tests, exams, essays or projects at 0% is a mistake too, unless it says practice. */
+      var real = !made && /\b(tests?|exams?|essays?|projects?|summative|assessments?|finals?)\b/i.test(g.name || '') && !/practice|non-?credit|optional|extra|bonus|ungraded|formative|review|in (process|progress)|drafts?/i.test(g.name || '');
       var line = '<a href="' + esc(AIX) + '" target="_blank" rel="noopener">' + esc(g.name) + '</a> <span class="mu">(weighted 0%, so its ' + plural(n, 'graded item') + (n === 1 ? ' doesn’t' : ' don’t') + ' count toward the final grade' +
-        (made ? '. Canvas made this group' + (/imported/i.test(g.name) ? ' when the course was copied' : '') + ', so this is almost never on purpose.)' : '. Fine if it’s practice; if they should count, move them or give the group a weight.)') + '</span>';
-      if (made) mK.zeroGroup = mBad.push(line); else mK.zeroGroup = mWarn.push(line);
+        (made ? '. Canvas made this group' + (/imported/i.test(g.name) ? ' when the course was copied' : '') + ', so this is almost never on purpose.)' :
+         real ? '. A group of ' + esc(g.name.trim().toLowerCase()) + ' at 0% means none of them count.)' :
+         '. Fine if it’s practice; if they should count, move them or give the group a weight.)') + '</span>';
+      if (made || real) mK.zeroGroup = mBad.push(line); else mK.zeroGroup = mWarn.push(line);
     });
   }
   if (!weighted && groups.length > 1 && graded.length) {
