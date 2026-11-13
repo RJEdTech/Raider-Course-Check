@@ -100,11 +100,15 @@ function isMidnight(d) { return d.getHours() === 0 && d.getMinutes() === 0 && d.
 /* Canvas's attendance tool (Roll Call) puts an undated assignment in every course. */
 var ATTENDANCE = /^\s*roll call attendance\s*$/i;
 
-/* Who a due date is for: the whole class, one section, or a few students. */
+/* Who a due date is for: the whole class, one section, or a few students.
+   Some teachers assign to "19 students" (the whole class picked by name, often
+   to leave out one student); half the class or more counts as the class. */
+var CLASS_SIZE = 0;
 function scopeOf(d) {
   if (d.base) return 'all';
-  var t = (d.title || '').trim();
-  if (d.set_type === 'ADHOC' || d.set_type === 'Group' || /^\d+ students?$/i.test(t)) return 'some';
+  var t = (d.title || '').trim(), mm = t.match(/^(\d+) students?$/i);
+  if (mm && CLASS_SIZE && +mm[1] >= CLASS_SIZE / 2) return 'all';
+  if (d.set_type === 'ADHOC' || d.set_type === 'Group' || mm) return 'some';
   return 'section';
 }
 function datesOf(a) {
@@ -133,6 +137,20 @@ async function analyze(cid, now) {
   var course;
   try { course = await get(C + '?include[]=term&include[]=syllabus_body&include[]=total_students'); }
   catch (e) { e.where = 'course'; throw e; }
+
+  /* Is this a class students take for a grade this semester? */
+  var termName = (course.term && course.term.name) || '';
+  var semester = /\b(1st|2nd)\s+semester\b/i.test(termName) && !/summer/i.test(termName) && !/^\s*x/i.test(termName);
+  var termEnd = parse((course.restrict_enrollments_to_course_dates && course.end_at) || (course.term && course.term.end_at));
+  var termStart = parse((course.restrict_enrollments_to_course_dates && course.start_at) || (course.term && course.term.start_at));
+  /* Only classes students take for a grade this semester. Clubs, activities,
+     PD and sandboxes live in other terms; IMPACT sits in the semester term. */
+  var notClass = null;
+  if (!semester) notClass = 'Raider Course Check is for classes students take for a grade. This course is in “' + (termName || 'no term') + '”, so it’s a club, activity, PD or practice course, and there’s nothing to check.';
+  else if (/\bimpact\b/i.test(course.name || '')) notClass = 'Raider Course Check is for classes students take for a grade. IMPACT isn’t one, so there’s nothing to check.';
+  else if (termEnd && termEnd < now) notClass = 'This class’s semester has ended, so there’s nothing to check. Open one of this semester’s classes.';
+  if (notClass) return { version: VERSION, cid: cid, course: { id: course.id, name: course.name, term: termName }, notClass: notClass, results: [], skipped: true, checkedAt: now.toISOString() };
+  CLASS_SIZE = course.total_students || 0;
 
   var all = await Promise.all([
     get(C + '/assignments?per_page=100&include[]=all_dates'),
@@ -166,16 +184,6 @@ async function analyze(cid, now) {
   }
   var MODS = base + '/courses/' + cid + '/modules';
 
-  /* Is this a class students take for a grade this semester? */
-  var termName = (course.term && course.term.name) || '';
-  var semester = /\b(1st|2nd)\s+semester\b/i.test(termName) && !/summer/i.test(termName) && !/^\s*x/i.test(termName);
-  var termEnd = parse((course.restrict_enrollments_to_course_dates && course.end_at) || (course.term && course.term.end_at));
-  var termStart = parse((course.restrict_enrollments_to_course_dates && course.start_at) || (course.term && course.term.start_at));
-  var notClass = null;
-  if (!semester) notClass = 'This course isn’t in a semester term (it’s in “' + (termName || 'no term') + '”), so it may not be a class students take for a grade. The checks are written for classes.';
-  else if (termEnd && termEnd < now) notClass = 'This class’s semester has ended. The checks are written for a class in session.';
-  else if (/^\s*impact\b/i.test(course.name || '')) notClass = 'IMPACT isn’t graded like a class, so some checks won’t apply.';
-  else if (!course.total_students) notClass = 'No students are enrolled yet.';
 
   var pubAsg = assignments.filter(function (a) { return a.published && !ATTENDANCE.test(a.name || ''); });
 
@@ -540,6 +548,7 @@ function saveStore(cid, s) { try { localStorage.setItem(storeKey(cid), JSON.stri
 /* Fill in status/result for self-checks and the weekly row. */
 function evaluate(data, store) {
   store = store || { self: {}, wk: {} };
+  if (data.skipped) return data;
   data.results.forEach(function (r) {
     if (r.self) {
       var when = store.self[r.key];
@@ -676,13 +685,14 @@ function weeklyDetail(r) {
 
 function render(box, data, store) {
   var body = box.querySelector('.bd');
+  if (data.skipped) { body.innerHTML = '<div style="font-size:16px;font-weight:700;margin:0 0 6px">' + esc(data.course.name) + '</div><p class="load" style="padding-top:6px">' + esc(data.notClass) + '</p><p class="note">Questions? <a class="teams" href="' + TEAMS + '" target="_blank" rel="noopener">Teams Jason Beyer</a></p>'; return; }
   evaluate(data, store);
   var count = { ok: 0, warn: 0, bad: 0, chk: 0 };
   data.results.forEach(function (r) { count[r.status]++; });
   var h = '<div style="font-size:16px;font-weight:700;margin:0 0 6px">' + esc(data.course.name) + '</div>' +
     '<div class="sum">' + ['bad', 'warn', 'chk', 'ok'].filter(function (s) { return count[s]; }).map(function (s) { return '<span class="pill" style="color:var(--' + s + ')">' + ICON[s] + ' ' + count[s] + ' ' + LABEL[s] + '</span>'; }).join('') + '</div>' +
     '<div class="why">Checked ' + new Date(data.checkedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + '. Click any row for details and the fix.</div>';
-  if (data.notClass) h += '<div class="banner">' + esc(data.notClass) + '</div>';
+  if (!data.course.students) h += '<div class="banner">No students are enrolled yet, so some checks have nothing to look at.</div>';
   var nx = nextStep(data);
   h += '<div style="border-left:6px solid ' + nx.color + ';background:var(--panel);border-radius:0 9px 9px 0;padding:11px 14px;margin:14px 0 4px">' +
     '<div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)">Your next step</div>' +
